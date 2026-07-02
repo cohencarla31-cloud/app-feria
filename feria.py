@@ -94,7 +94,9 @@ if st.button("📝 Enviar y Guardar Venta", use_container_width=True):
         try:
             # Conectar usando el robot
             scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-            creds = Credentials.from_service_account_file("credenciales.json", scopes=scopes)
+            import json
+cred_dict = json.loads(st.secrets["llave_google"])
+creds = Credentials.from_service_account_info(cred_dict, scopes=scopes)
             gc = gspread.authorize(creds)
             
             # Abrir el archivo y la pestaña
