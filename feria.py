@@ -83,22 +83,22 @@ caja_elegida = st.selectbox("¿A qué línea enviar?", list(CAJAS.keys()))
 numero_destino = CAJAS[caja_elegida]
 
 if st.button("📝 Enviar y Guardar Venta", use_container_width=True):
-    if vendedor == "Seleccionar...":
+   if vendedor == "Seleccionar...":
         st.error("Por favor, selecciona el nombre del Vendedor.")
     elif not cliente:
         st.error("Por favor, ingresa el nombre del Cliente.")
     elif total_general == 0:
         st.warning("No has ingresado ningún producto al pedido.")
     else:
-            try:
-                scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-                import json
-                cred_dict = json.loads(st.secrets["llave_google"])
-                creds = Credentials.from_service_account_info(cred_dict, scopes=scopes)
-                gc = gspread.authorize(creds)
-            except Exception as e:
-                st.error(f"Error al leer la llave mágica: {e}")
-                st.stop()
+        try:
+            scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+            import json
+            cred_dict = json.loads(st.secrets["llave_google"])
+            creds = Credentials.from_service_account_info(cred_dict, scopes=scopes)
+            gc = gspread.authorize(creds)
+        except Exception as e:
+            st.error(f"Error al leer la llave mágica: {e}")
+            st.stop()
             
             # Abrir el archivo y la pestaña
             archivo_excel = gc.open_by_url(LINK_NORMAL_DEL_EXCEL)
