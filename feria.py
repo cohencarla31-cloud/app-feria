@@ -83,7 +83,7 @@ caja_elegida = st.selectbox("¿A qué línea enviar?", list(CAJAS.keys()))
 numero_destino = CAJAS[caja_elegida]
 
 if st.button("📝 Enviar y Guardar Venta", use_container_width=True):
-   if vendedor == "Seleccionar...":
+    if vendedor == "Seleccionar...":
         st.error("Por favor, selecciona el nombre del Vendedor.")
     elif not cliente:
         st.error("Por favor, ingresa el nombre del Cliente.")
