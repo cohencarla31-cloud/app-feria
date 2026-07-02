@@ -90,14 +90,15 @@ if st.button("📝 Enviar y Guardar Venta", use_container_width=True):
     elif total_general == 0:
         st.warning("No has ingresado ningún producto al pedido.")
     else:
-        # --- 1. GUARDAR MAGÍCAMENTE EN EL EXCEL ---
-        try:
-            # Conectar usando el robot
-            scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-            import json
-cred_dict = json.loads(st.secrets["llave_google"])
-creds = Credentials.from_service_account_info(cred_dict, scopes=scopes)
-            gc = gspread.authorize(creds)
+     try:
+                scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+                import json
+                cred_dict = json.loads(st.secrets["llave_google"])
+                creds = Credentials.from_service_account_info(cred_dict, scopes=scopes)
+                gc = gspread.authorize(creds)
+            except Exception as e:
+                st.error(f"Error al leer la llave mágica: {e}")
+                st.stop()
             
             # Abrir el archivo y la pestaña
             archivo_excel = gc.open_by_url(LINK_NORMAL_DEL_EXCEL)
