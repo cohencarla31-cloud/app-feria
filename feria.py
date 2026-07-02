@@ -89,7 +89,7 @@ if st.button("📝 Enviar y Guardar Venta", use_container_width=True):
         st.error("Por favor, ingresa el nombre del Cliente.")
     elif total_general == 0:
         st.warning("No has ingresado ningún producto al pedido.")
-   else:
+    else:
             try:
                 scopes = ["https://www.googleapis.com/auth/spreadsheets"]
                 import json
