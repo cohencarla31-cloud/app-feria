@@ -90,7 +90,7 @@ if st.button("📝 Enviar y Guardar Venta", use_container_width=True):
     elif total_general == 0:
         st.warning("No has ingresado ningún producto al pedido.")
     else:
-try:
+ try:
             scopes = ["https://www.googleapis.com/auth/spreadsheets"]
             import json
             cred_dict = json.loads(st.secrets["llave_google"])
