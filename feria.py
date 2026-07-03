@@ -18,26 +18,29 @@ LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly
 @st.cache_data(ttl=30)
 def cargar_inventario():
     try:
-        # La app lee la pestaña 'Balance' que ya tiene los datos unificados y calculados
         df = pd.read_csv(LINK_CSV_BALANCE)
-        df = df.dropna(subset=['Producto'])
         
-        # El nombre del producto ya trae el emoji desde el Google Sheet
-        productos = df['Producto'].tolist()
-        precios = dict(zip(df['Producto'], df['Precio']))
+        # 1. Limpiamos nombres de columnas (por si hay espacios extra)
+        df.columns = df.columns.str.strip()
         
-        # Manejo flexible de Stock
+        # 2. Convertimos Precio a numérico (quitando cualquier símbolo '$' o espacios)
+        if df['Precio'].dtype == 'object':
+            df['Precio'] = df['Precio'].replace(r'[\$,]', '', regex=True).astype(float)
+        
+        # 3. Limpiamos el Stock
         if 'Stock Final' in df.columns:
+            df['Stock Final'] = pd.to_numeric(df['Stock Final'], errors='coerce').fillna(0)
             stock_final = dict(zip(df['Producto'], df['Stock Final']))
         else:
-            stock_final = {p: 99999 for p in productos}
+            stock_final = {p: 99999 for p in df['Producto']}
+            
+        productos = df['Producto'].tolist()
+        precios = dict(zip(df['Producto'], df['Precio']))
             
         return productos, precios, stock_final
     except Exception as e:
-        st.error(f"Error al cargar datos: {e}")
+        st.error(f"Error técnico: {e}")
         return [], {}, {}
-
-PRODUCTOS, PRECIOS, STOCK_DISPONIBLE = cargar_inventario()
 
 # ==========================================
 # 2. INTERFAZ
@@ -80,9 +83,6 @@ for producto in PRODUCTOS:
 st.divider()
 st.write(f"### Total del Pedido: **${total_general}**")
 
-# ==========================================
-# 4. BOTONES DE ACCIÓN
-# ==========================================
 # ==========================================
 # 4. BOTONES DE ACCIÓN
 # ==========================================
