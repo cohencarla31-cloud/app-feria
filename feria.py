@@ -90,32 +90,28 @@ if st.button("📝 Enviar y Guardar Venta", use_container_width=True):
     elif total_general == 0:
         st.warning("No has ingresado ningún producto al pedido.")
     else:
-    try:
+        try:
             scopes = ["https://www.googleapis.com/auth/spreadsheets"]
             import json
             cred_dict = json.loads(st.secrets["llave_google"])
             creds = Credentials.from_service_account_info(cred_dict, scopes=scopes)
             gc = gspread.authorize(creds)
             
-            # Abrir el archivo y la pestaña
             archivo_excel = gc.open_by_url(LINK_NORMAL_DEL_EXCEL)
             pestana_ventas = archivo_excel.worksheet("Registro de Ventas")
             
-            # Sacar la hora exacta
             fecha_actual = date.today().strftime("%d/%m/%Y")
             hora_actual = datetime.now().strftime("%H:%M:%S")
             
-            # Guardar cada producto vendido como una fila nueva
             for p, datos in pedidos.items():
                 fila = [fecha_actual, hora_actual, vendedor, cliente, p, datos['cantidad'], datos['subtotal']]
                 pestana_ventas.append_row(fila)
-                
+            
             st.success("✅ Venta registrada correctamente en el Excel.")
             
         except Exception as e:
-            st.error(f"Error al escribir en Excel: {e}")
+            st.error(f"❌ Error al guardar en el Excel: {e}")
             st.stop()
-
         # --- 2. ABRIR WHATSAPP ---
         mensaje = f"NUEVO PEDIDO\nVendedor: {vendedor}\nCliente: {cliente}\n-------------------\n"
         for p, datos in pedidos.items():
