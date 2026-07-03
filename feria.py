@@ -4,42 +4,41 @@ from datetime import date, datetime
 import urllib.parse
 import gspread
 from google.oauth2.service_account import Credentials
+import json
 
 # ==========================================
-# 1. SISTEMA DE SUSCRIPCIÓN
+# 1. CONFIGURACIÓN
 # ==========================================
-FECHA_VENCIMIENTO = date(2026, 8, 2) 
-hoy = date.today()
-
 st.set_page_config(page_title="Punto de Venta Feria", page_icon="🛒", layout="centered")
 
-if hoy > FECHA_VENCIMIENTO:
-    st.error("⚠️ La licencia de la aplicación ha expirado.")
-    st.stop()
-
-# ==========================================
-# 2. CONEXIÓN A GOOGLE SHEETS
-# ==========================================
-LINK_CSV_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQM5gsQcK0_77hP18d98tevZ2IaCmEahb8k3J-2Ey7ma5xb5L-YLc-NHQCUKxo8WJBY9Aw8Px5RV3kY/pub?output=csv"
+# Reemplaza con tus enlaces publicados a la web (Archivo -> Compartir -> Publicar en la web -> CSV)
+LINK_CSV_BALANCE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQM5gsQcK0_77hP18d98tevZ2IaCmEahb8k3J-2Ey7ma5xb5L-YLc-NHQCUKxo8WJBY9Aw8Px5RV3kY/pub?output=csv+"
 LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly0rwqfv3921uVRch3W7U_nXe-PLEU/edit?gid=0#gid=0"
 
 @st.cache_data(ttl=30)
-def cargar_inventario(url):
+def cargar_inventario():
     try:
-        df = pd.read_csv(url)
+        # La app solo lee la pestaña "Balance" donde ya está todo calculado
+        df = pd.read_csv(LINK_CSV_BALANCE)
+        
+        # Filtramos filas vacías
+        df = df.dropna(subset=['Producto'])
+        
+        productos = df['Producto'].tolist()
         precios = dict(zip(df['Producto'], df['Precio']))
-        stock = dict(zip(df['Producto'], df['Stock']))
-        return precios, stock
-    except:
-        return {"Manzana": 150.0}, {"Manzana": 100.0}
+        stock_final = dict(zip(df['Producto'], df['Stock Final']))
+        
+        return productos, precios, stock_final
+    except Exception as e:
+        st.error(f"Error al cargar datos: {e}")
+        return [], {}, {}
 
-PRODUCTOS, STOCK_DISPONIBLE = cargar_inventario(LINK_CSV_GOOGLE_SHEETS)
+PRODUCTOS, PRECIOS, STOCK_DISPONIBLE = cargar_inventario()
 
 # ==========================================
-# 3. INTERFAZ: DATOS GENERALES
+# 2. INTERFAZ
 # ==========================================
 st.title("🛒 Toma de Pedidos")
-
 col_vendedor, col_cliente = st.columns(2)
 with col_vendedor:
     vendedor = st.selectbox("Vendedor:", ["Seleccionar...", "Juan", "Pedro", "María", "Carlos"])
@@ -49,21 +48,23 @@ with col_cliente:
 st.divider()
 
 # ==========================================
-# 4. FORMULARIO DE PRODUCTOS
+# 3. LISTADO DE PRODUCTOS
 # ==========================================
-st.subheader("Frutas y Verduras")
+st.subheader("Disponibles")
 pedidos = {}
 total_general = 0.0
 
-for producto, precio in PRODUCTOS.items():
+for producto in PRODUCTOS:
+    precio = PRECIOS[producto]
     stock_actual = STOCK_DISPONIBLE.get(producto, 0.0)
     
+    # Mostrar producto con emoji (si el nombre en Balance lo incluye)
     col1, col2 = st.columns([3, 2])
     with col1:
         st.write(f"**{producto}**")
-        st.caption(f"Precio: ${precio} | Disponible: {stock_actual} kg/un.")
+        st.caption(f"Precio: ${precio} | Stock: {stock_actual}")
     with col2:
-        cantidad = st.number_input("Cant.", min_value=0.0, max_value=float(stock_actual), step=0.5, key=producto, label_visibility="collapsed")
+        cantidad = st.number_input("Cant.", min_value=0.0, max_value=float(stock_actual), step=0.5, key=producto)
         
         if cantidad > 0:
             subtotal = cantidad * precio
@@ -71,54 +72,43 @@ for producto, precio in PRODUCTOS.items():
             total_general += subtotal
 
 st.divider()
-st.write(f"### Total del Pedido: **${total_general}**")
+st.write(f"### Total: **${total_general}**")
 
 # ==========================================
-# 5. ENVÍO Y GUARDADO EN BASE DE DATOS
+# 4. BOTONES
 # ==========================================
-CAJAS = {"Caja 1 (Principal)": "59893343092", "Caja 2 (Secundaria)": "5492615437545"}
+col_btn1, col_btn2 = st.columns(2)
+with col_btn1:
+    if st.button("🧹 Limpiar"):
+        st.rerun()
 
-st.subheader("Enviar Pedido")
-caja_elegida = st.selectbox("¿A qué línea enviar?", list(CAJAS.keys()))
-numero_destino = CAJAS[caja_elegida]
-
-if st.button("📝 Enviar y Guardar Venta", use_container_width=True):
-    if vendedor == "Seleccionar...":
-        st.error("Por favor, selecciona el nombre del Vendedor.")
-    elif not cliente:
-        st.error("Por favor, ingresa el nombre del Cliente.")
-    elif total_general == 0:
-        st.warning("No has ingresado ningún producto al pedido.")
-    else:
-        try:
-            scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-            import json
-            cred_dict = json.loads(st.secrets["llave_google"])
-            creds = Credentials.from_service_account_info(cred_dict, scopes=scopes)
-            gc = gspread.authorize(creds)
-            
-            archivo_excel = gc.open_by_url(LINK_NORMAL_DEL_EXCEL)
-            pestana_ventas = archivo_excel.worksheet("Registro de Ventas")
-            
-            fecha_actual = date.today().strftime("%d/%m/%Y")
-            hora_actual = datetime.now().strftime("%H:%M:%S")
-            
-            for p, datos in pedidos.items():
-                fila = [fecha_actual, hora_actual, vendedor, cliente, p, datos['cantidad'], datos['subtotal']]
-                pestana_ventas.append_row(fila)
-            
-            st.success("✅ Venta registrada correctamente en el Excel.")
-            
-        except Exception as e:
-            st.error(f"❌ Error al guardar en el Excel: {e}")
-            st.stop()
-        # --- 2. ABRIR WHATSAPP ---
-        mensaje = f"NUEVO PEDIDO\nVendedor: {vendedor}\nCliente: {cliente}\n-------------------\n"
-        for p, datos in pedidos.items():
-            mensaje += f"- {datos['cantidad']} x {p} = ${datos['subtotal']}\n"
-        mensaje += f"-------------------\nTOTAL A COBRAR: ${total_general}"
-
-        mensaje_codificado = urllib.parse.quote(mensaje.encode('utf-8'))
-        link_whatsapp = f"https://wa.me/{numero_destino}?text={mensaje_codificado}"
-        
-        st.link_button(f"📲 Enviar WhatsApp a la {caja_elegida}", link_whatsapp, use_container_width=True)
+with col_btn2:
+    if st.button("📝 Enviar"):
+        if vendedor == "Seleccionar..." or not cliente or total_general == 0:
+            st.warning("Completa vendedor, cliente y productos.")
+        else:
+            # GUARDAR EN EXCEL
+            try:
+                scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+                cred_dict = json.loads(st.secrets["llave_google"])
+                creds = Credentials.from_service_account_info(cred_dict, scopes=scopes)
+                gc = gspread.authorize(creds)
+                sheet = gc.open_by_url(LINK_NORMAL_DEL_EXCEL).worksheet("Registro de Ventas")
+                
+                fecha = date.today().strftime("%d/%m/%Y")
+                hora = datetime.now().strftime("%H:%M:%S")
+                for p, d in pedidos.items():
+                    sheet.append_row([fecha, hora, vendedor, cliente, p, d['cantidad'], d['subtotal']])
+                
+                st.success("¡Venta registrada!")
+                
+                # ENLACE WHATSAPP
+                msg = f"Pedido de {cliente}\nVendedor: {vendedor}\n"
+                for p, d in pedidos.items():
+                    msg += f"{p}: {d['cantidad']} x ${d['subtotal']}\n"
+                msg += f"TOTAL: ${total_general}"
+                
+                url_wa = f"https://wa.me/?text={urllib.parse.quote(msg)}"
+                st.link_button("📲 Enviar WhatsApp", url_wa)
+            except Exception as e:
+                st.error(f"Error: {e}")
