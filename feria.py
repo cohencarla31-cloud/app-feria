@@ -15,33 +15,43 @@ st.set_page_config(page_title="Punto de Venta Feria", page_icon="🛒", layout="
 LINK_CSV_BALANCE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQM5gsQcK0_77hP18d98tevZ2IaCmEahb8k3J-2Ey7ma5xb5L-YLc-NHQCUKxo8WJBY9Aw8Px5RV3kY/pub?output=csv"
 LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly0rwqfv3921uVRch3W7U_nXe-PLEU/edit?gid=832040050#gid=832040050"
 
+# --- REEMPLAZA TU FUNCIÓN CARGAR_INVENTARIO POR ESTA ---
+
 @st.cache_data(ttl=30)
 def cargar_inventario():
     try:
         df = pd.read_csv(LINK_CSV_BALANCE)
+        df.columns = df.columns.str.strip() # Limpieza de nombres de columna
+        df = df.dropna(subset=['Producto'])
         
-        # 1. Limpiamos nombres de columnas (por si hay espacios extra)
-        df.columns = df.columns.str.strip()
-        
-        # 2. Convertimos Precio a numérico (quitando cualquier símbolo '$' o espacios)
+        # Limpieza de precios: forzamos a número
         if df['Precio'].dtype == 'object':
-            df['Precio'] = df['Precio'].replace(r'[\$,]', '', regex=True).astype(float)
+            df['Precio'] = df['Precio'].replace(r'[\$,]', '', regex=True)
+        df['Precio'] = pd.to_numeric(df['Precio'], errors='coerce').fillna(0.0)
         
-        # 3. Limpiamos el Stock
+        # Limpieza de stock
         if 'Stock Final' in df.columns:
-            df['Stock Final'] = pd.to_numeric(df['Stock Final'], errors='coerce').fillna(0)
-            stock_final = dict(zip(df['Producto'], df['Stock Final']))
+            df['Stock Final'] = pd.to_numeric(df['Stock Final'], errors='coerce').fillna(99999)
         else:
-            stock_final = {p: 99999 for p in df['Producto']}
+            df['Stock Final'] = 99999
             
         productos = df['Producto'].tolist()
         precios = dict(zip(df['Producto'], df['Precio']))
+        stock_final = dict(zip(df['Producto'], df['Stock Final']))
             
         return productos, precios, stock_final
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error al cargar: {e}")
+        # Retornamos valores vacíos seguros para que la app no se rompa
         return [], {}, {}
 
+# --- LLAMADA SEGURA ---
+PRODUCTOS, PRECIOS, STOCK_DISPONIBLE = cargar_inventario()
+
+# Verificación de seguridad antes del bucle
+if not PRODUCTOS:
+    st.warning("No se pudieron cargar productos. Verifica el enlace al CSV.")
+    st.stop() # Detiene la ejecución aquí si no hay productos
 # ==========================================
 # 2. INTERFAZ
 # ==========================================
