@@ -140,7 +140,7 @@ with col_btn2:
                 
                 for p, d in pedidos.items():
                     # Registramos la venta con el subtotal ya rebajado
-                    sheet.append_row([str(date.today()), str(datetime.now().time()), vendedor, cliente, p, d['cant'], d['sub_final']])
+                    sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, p, d['cant'], d['sub_final']])
                 
                 st.success("✅ Venta registrada correctamente en el Excel.")
                 
