@@ -26,13 +26,15 @@ def cargar_inventario():
         else:
             df['Prod_Full'] = df['Producto'].astype(str)
             
-        precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio'], errors='coerce').fillna(0)))
+        # Limpiador mágico: Si alguien escribe el signo $ a mano, se lo quitamos para que no dé error
+        df['Precio_Num'] = df['Precio'].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False)
+        precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio_Num'], errors='coerce').fillna(0)))
         
         # Búsqueda de Stock
         col_stock = next((c for c in df.columns if "Stock" in c), None)
         stock = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_stock], errors='coerce').fillna(99999))) if col_stock else {}
         
-        # Búsqueda de Descuento (Busca columna que diga "Descuento")
+        # Búsqueda de Descuento
         col_desc = next((c for c in df.columns if "Descuento" in c), None)
         if col_desc:
             descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0)))
@@ -62,22 +64,29 @@ with col_datos2:
 st.divider()
 
 # ==========================================
-# 3. LISTADO DE PRODUCTOS Y CÁLCULOS
+# 3. BUSCADOR INTELIGENTE Y PRODUCTOS
 # ==========================================
 pedidos = {}
 total_general = 0.0
 total_ahorro = 0.0
 
-st.write("### Productos")
-for p in PRODUCTOS:
-    # Mostramos cartelito de descuento si lo tiene
+# ¡NUEVO!: Buscador en lugar de lista larga
+productos_seleccionados = st.multiselect(
+    "🔍 Buscar y agregar productos al pedido:", 
+    options=PRODUCTOS,
+    placeholder="Toca aquí para buscar (ej: tomate)..."
+)
+
+if productos_seleccionados:
+    st.write("### Detalle del Pedido")
+
+for p in productos_seleccionados:
     desc_pct = DESCUENTOS.get(p, 0)
     label_producto = f"🔥 {p} ({int(desc_pct)}% OFF)" if desc_pct > 0 else f"{p}"
     
     cant = st.number_input(label_producto, min_value=0.0, step=0.05, key=p)
     
     if cant > 0:
-        # Traductor de Balanza
         if "unidad" in p.lower() or "(u)" in p.lower():
             st.caption(f"📦 *Entendí:* **{int(cant)} unidad(es)**")
         else:
@@ -90,18 +99,13 @@ for p in PRODUCTOS:
             else:
                 st.caption(f"⚖️ *Entendí:* **{gramos} gramos**")
             
-        # Cálculos de precio con descuento individual
         precio_orig = PRECIOS.get(p, 0)
         precio_final = precio_orig * (1 - (desc_pct / 100))
         
         sub_final = cant * precio_final
         ahorro = (cant * precio_orig) - sub_final
         
-        pedidos[p] = {
-            "cant": cant, 
-            "sub_final": sub_final, 
-            "desc_pct": desc_pct
-        }
+        pedidos[p] = {"cant": cant, "sub_final": sub_final, "desc_pct": desc_pct}
         total_general += sub_final
         total_ahorro += ahorro
 
@@ -121,12 +125,13 @@ col_btn1, col_btn2 = st.columns(2)
 
 with col_btn1:
     if st.button("🧹 Limpiar Pedido"):
+        st.session_state.clear() # Esto borra la memoria caché para que limpie de verdad
         st.rerun()
 
 with col_btn2:
     if st.button("📝 Enviar Venta"):
         if vendedor == "Seleccionar..." or not cliente or total_general == 0:
-            st.warning("⚠️ Falta completar Vendedor, Cliente o ingresar productos.")
+            st.warning("⚠️ Falta completar Vendedor, Cliente o ingresar cantidades.")
         else:
             try:
                 # 1. Guardar en Google Sheets
@@ -139,7 +144,7 @@ with col_btn2:
                 sheet = gc.open_by_url(LINK_NORMAL_DEL_EXCEL).worksheet("Registro de Ventas")
                 
                 for p, d in pedidos.items():
-                    # Registramos la venta con el subtotal ya rebajado
+                    # Usamos strftime para limpiar los microsegundos de la hora
                     sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, p, d['cant'], d['sub_final']])
                 
                 st.success("✅ Venta registrada correctamente en el Excel.")
