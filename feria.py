@@ -12,7 +12,7 @@ import json
 st.set_page_config(page_title="Punto de Venta Feria", layout="centered")
 
 LINK_CSV_BALANCE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQM5gsQcK0_77hP18d98tevZ2IaCmEahb8k3J-2Ey7ma5xb5L-YLc-NHQCUKxo8WJBY9Aw8Px5RV3kY/pub?output=csv" 
-LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly0rwqfv3921uVRch3W7U_nXe-PLEU/edit?gid=0#gid=0"
+LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly0rwqfv3921uVRch3W7U_nXe-PLEU/edit?gid=832040050#gid=832040050
 
 @st.cache_data(ttl=30)
 def cargar_inventario():
@@ -26,27 +26,43 @@ def cargar_inventario():
         else:
             df['Prod_Full'] = df['Producto'].astype(str)
             
-        # Limpiador mágico: Si alguien escribe el signo $ a mano, se lo quitamos para que no dé error
+        nombres_planos = dict(zip(df['Prod_Full'], df['Producto'].astype(str).str.strip()))
+            
+        # Precios
         df['Precio_Num'] = df['Precio'].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False)
         precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio_Num'], errors='coerce').fillna(0)))
         
-        # Búsqueda de Stock
+        # Stock
         col_stock = next((c for c in df.columns if "Stock" in c), None)
         stock = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_stock], errors='coerce').fillna(99999))) if col_stock else {}
         
-        # Búsqueda de Descuento
+        # Descuentos
         col_desc = next((c for c in df.columns if "Descuento" in c), None)
-        if col_desc:
-            descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0)))
-        else:
-            descuentos = {p: 0 for p in df['Prod_Full']}
+        descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0))) if col_desc else {p: 0 for p in df['Prod_Full']}
             
-        return df['Prod_Full'].tolist(), precios, stock, descuentos
+        # ¡NUEVO! Categorías
+        col_cat = next((c for c in df.columns if "Categor" in c or "categor" in c), None)
+        if col_cat:
+            # Rellenar los vacíos con "General"
+            cats = df[col_cat].astype(str).str.strip().replace(['nan', 'None', ''], 'General')
+            categorias = dict(zip(df['Prod_Full'], cats))
+        else:
+            categorias = {p: "General" for p in df['Prod_Full']}
+            
+        return df['Prod_Full'].tolist(), precios, stock, descuentos, nombres_planos, categorias
     except Exception as e:
         st.error(f"Error al cargar datos: {e}")
-        return [], {}, {}, {}
+        return [], {}, {}, {}, {}, {}
 
-PRODUCTOS, PRECIOS, STOCK, DESCUENTOS = cargar_inventario()
+PRODUCTOS, PRECIOS, STOCK, DESCUENTOS, NOMBRES_PLANOS, CATEGORIAS = cargar_inventario()
+
+# Agrupar los productos en sus categorías
+productos_por_cat = {}
+for p in PRODUCTOS:
+    cat = CATEGORIAS.get(p, "General")
+    if cat not in productos_por_cat:
+        productos_por_cat[cat] = []
+    productos_por_cat[cat].append(p)
 
 # ==========================================
 # 2. INTERFAZ Y DATOS
@@ -64,21 +80,28 @@ with col_datos2:
 st.divider()
 
 # ==========================================
-# 3. BUSCADOR INTELIGENTE Y PRODUCTOS
+# 3. CATEGORÍAS Y PRODUCTOS (PESTAÑAS)
 # ==========================================
 pedidos = {}
 total_general = 0.0
 total_ahorro = 0.0
 
-# ¡NUEVO!: Buscador en lugar de lista larga
-productos_seleccionados = st.multiselect(
-    "🔍 Buscar y agregar productos al pedido:", 
-    options=PRODUCTOS,
-    placeholder="Toca aquí para buscar (ej: tomate)..."
-)
+st.write("### 🔍 Catálogo de Productos")
+nombres_cats = sorted(list(productos_por_cat.keys()))
+productos_seleccionados = []
+
+# Si no hay categorías creadas aún, muestra el buscador normal. Si hay, crea pestañas.
+if len(nombres_cats) == 1:
+    productos_seleccionados = st.multiselect("Buscar y agregar productos:", options=PRODUCTOS)
+else:
+    tabs = st.tabs(nombres_cats)
+    for i, cat in enumerate(nombres_cats):
+        with tabs[i]:
+            sel = st.multiselect(f"Seleccionar en {cat}:", options=productos_por_cat[cat], key=f"ms_{cat}")
+            productos_seleccionados.extend(sel)
 
 if productos_seleccionados:
-    st.write("### Detalle del Pedido")
+    st.write("### 📝 Detalle del Pedido")
 
 for p in productos_seleccionados:
     desc_pct = DESCUENTOS.get(p, 0)
@@ -111,7 +134,6 @@ for p in productos_seleccionados:
 
 st.divider()
 
-# Mostrar totales
 st.write(f"### TOTAL A COBRAR: ${total_general:,.1f}")
 if total_ahorro > 0:
     st.caption(f"*(El cliente ahorró ${total_ahorro:,.1f} en descuentos)*")
@@ -125,7 +147,7 @@ col_btn1, col_btn2 = st.columns(2)
 
 with col_btn1:
     if st.button("🧹 Limpiar Pedido"):
-        st.session_state.clear() # Esto borra la memoria caché para que limpie de verdad
+        st.session_state.clear()
         st.rerun()
 
 with col_btn2:
@@ -144,8 +166,8 @@ with col_btn2:
                 sheet = gc.open_by_url(LINK_NORMAL_DEL_EXCEL).worksheet("Registro de Ventas")
                 
                 for p, d in pedidos.items():
-                    # Usamos strftime para limpiar los microsegundos de la hora
-                    sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, p, d['cant'], d['sub_final']])
+                    nombre_limpio = NOMBRES_PLANOS.get(p, p)
+                    sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, nombre_limpio, d['cant'], d['sub_final']])
                 
                 st.success("✅ Venta registrada correctamente en el Excel.")
                 
@@ -159,7 +181,7 @@ with col_btn2:
                 
                 msg_caja += f"-------------------\n💰 TOTAL A COBRAR: ${total_general:,.1f}"
                 
-                num_caja = "59893343092" if caja == "Caja 1" else "59893343092"
+                num_caja = "59893343092" if caja == "Caja 1" else "5983343092"
                 url_caja = f"https://wa.me/{num_caja}?text={urllib.parse.quote(msg_caja)}"
                 
                 # 3. Armar el mensaje para el CLIENTE
