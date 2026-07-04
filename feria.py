@@ -11,8 +11,9 @@ import json
 # ==========================================
 st.set_page_config(page_title="Punto de Venta Feria", layout="centered")
 
+# REEMPLAZA ESTOS VALORES CON TUS ENLACES REALES (Cierra bien las comillas al final)
 LINK_CSV_BALANCE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQM5gsQcK0_77hP18d98tevZ2IaCmEahb8k3J-2Ey7ma5xb5L-YLc-NHQCUKxo8WJBY9Aw8Px5RV3kY/pub?output=csv" 
-LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly0rwqfv3921uVRch3W7U_nXe-PLEU/edit?gid=832040050#gid=832040050"
+LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly0rwqfv3921uVRch3W7U_nXe-PLEU/edit?gid=985182239#gid=985182239"
 
 @st.cache_data(ttl=30)
 def cargar_inventario():
@@ -28,7 +29,7 @@ def cargar_inventario():
             
         nombres_planos = dict(zip(df['Prod_Full'], df['Producto'].astype(str).str.strip()))
             
-        # Precios
+        # Precios (con limpiador de signos de pesos por si acaso)
         df['Precio_Num'] = df['Precio'].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False)
         precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio_Num'], errors='coerce').fillna(0)))
         
@@ -40,10 +41,9 @@ def cargar_inventario():
         col_desc = next((c for c in df.columns if "Descuento" in c), None)
         descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0))) if col_desc else {p: 0 for p in df['Prod_Full']}
             
-        # ¡NUEVO! Categorías
+        # Categorías
         col_cat = next((c for c in df.columns if "Categor" in c or "categor" in c), None)
         if col_cat:
-            # Rellenar los vacíos con "General"
             cats = df[col_cat].astype(str).str.strip().replace(['nan', 'None', ''], 'General')
             categorias = dict(zip(df['Prod_Full'], cats))
         else:
@@ -56,7 +56,7 @@ def cargar_inventario():
 
 PRODUCTOS, PRECIOS, STOCK, DESCUENTOS, NOMBRES_PLANOS, CATEGORIAS = cargar_inventario()
 
-# Agrupar los productos en sus categorías
+# Agrupar los productos en sus categorías para las pestañas
 productos_por_cat = {}
 for p in PRODUCTOS:
     cat = CATEGORIAS.get(p, "General")
@@ -80,7 +80,7 @@ with col_datos2:
 st.divider()
 
 # ==========================================
-# 3. CATEGORÍAS Y PRODUCTOS (PESTAÑAS)
+# 3. CATEGORÍAS CON BUSCADOR GLOBAL TRIPLE A
 # ==========================================
 pedidos = {}
 total_general = 0.0
@@ -90,16 +90,33 @@ st.write("### 🔍 Catálogo de Productos")
 nombres_cats = sorted(list(productos_por_cat.keys()))
 productos_seleccionados = []
 
-# Si no hay categorías creadas aún, muestra el buscador normal. Si hay, crea pestañas.
-if len(nombres_cats) == 1:
-    productos_seleccionados = st.multiselect("Buscar y agregar productos:", options=PRODUCTOS)
-else:
-    tabs = st.tabs(nombres_cats)
-    for i, cat in enumerate(nombres_cats):
-        with tabs[i]:
-            sel = st.multiselect(f"Seleccionar en {cat}:", options=productos_por_cat[cat], key=f"ms_{cat}")
-            productos_seleccionados.extend(sel)
+# Creamos las pestañas: La primera siempre busca en TODO, las siguientes por rubro
+nombres_tabs = ["🔍 Todo el Catálogo"] + nombres_cats
+tabs = st.tabs(nombres_tabs)
 
+# Pestaña 1: BUSCADOR GLOBAL (Busca en cualquier rubro)
+with tabs[0]:
+    sel_todo = st.multiselect(
+        "Escribe aquí para buscar en cualquier rubro:", 
+        options=PRODUCTOS, 
+        key="ms_todo",
+        placeholder="Ej: Orégano, Papa, Queso..."
+    )
+    productos_seleccionados.extend(sel_todo)
+
+# Pestañas Siguientes: Filtros por Rubro específico
+for i, cat in enumerate(nombres_cats):
+    with tabs[i+1]:
+        sel = st.multiselect(f"Seleccionar dentro de {cat}:", options=productos_por_cat[cat], key=f"ms_{cat}")
+        productos_seleccionados.extend(sel)
+
+# Limpiador mágico: Evita que un producto aparezca dos veces si lo eligen en ambos lados
+productos_seleccionados = list(dict.fromkeys(productos_seleccionados))
+
+
+# ==========================================
+# 4. GENERAR CASILLEROS DE CANTIDAD
+# ==========================================
 if productos_seleccionados:
     st.write("### 📝 Detalle del Pedido")
 
@@ -110,6 +127,7 @@ for p in productos_seleccionados:
     cant = st.number_input(label_producto, min_value=0.0, step=0.05, key=p)
     
     if cant > 0:
+        # Traductor de Balanza
         if "unidad" in p.lower() or "(u)" in p.lower():
             st.caption(f"📦 *Entendí:* **{int(cant)} unidad(es)**")
         else:
@@ -141,7 +159,7 @@ if total_ahorro > 0:
 st.divider()
 
 # ==========================================
-# 4. BOTONES DE ACCIÓN Y REGISTRO
+# 5. BOTONES DE ACCIÓN Y REGISTRO
 # ==========================================
 col_btn1, col_btn2 = st.columns(2)
 
@@ -156,7 +174,7 @@ with col_btn2:
             st.warning("⚠️ Falta completar Vendedor, Cliente o ingresar cantidades.")
         else:
             try:
-                # 1. Guardar en Google Sheets
+                # 1. Guardar en Google Sheets (Limpio de Emojis)
                 scopes = [
                     "https://www.googleapis.com/auth/spreadsheets",
                     "https://www.googleapis.com/auth/drive"
@@ -181,7 +199,7 @@ with col_btn2:
                 
                 msg_caja += f"-------------------\n💰 TOTAL A COBRAR: ${total_general:,.1f}"
                 
-                num_caja = "59893343092" if caja == "Caja 1" else "5983343092"
+                num_caja = "59893343092" if caja == "Caja 1" else "59893343092"
                 url_caja = f"https://wa.me/{num_caja}?text={urllib.parse.quote(msg_caja)}"
                 
                 # 3. Armar el mensaje para el CLIENTE
