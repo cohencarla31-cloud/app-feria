@@ -182,7 +182,24 @@ col_btn1, col_btn2 = st.columns(2)
 
 with col_btn1:
     if st.button("🧹 Limpiar Pedido"):
-        st.session_state.clear()
+        # Recorremos toda la memoria y forzamos la limpieza según el tipo de dato
+        for key in list(st.session_state.keys()):
+            if key.startswith("ms_"):  
+                # A los buscadores de productos los forzamos a quedar vacíos []
+                st.session_state[key] = []
+            elif key in ["cliente", "tel_cliente"]:
+                # A los campos de texto los dejamos en blanco
+                st.session_state[key] = ""
+            elif key == "vendedor":
+                # Al vendedor lo volvemos a su estado inicial
+                st.session_state[key] = "Seleccionar..."
+            elif key == "caja":
+                st.session_state[key] = "Caja 1"
+            else:
+                # Borramos el resto (los contadores de kilos, gramos y unidades)
+                del st.session_state[key]
+        
+        # Reiniciamos la pantalla con todo limpio
         st.rerun()
 
 with col_btn2:
