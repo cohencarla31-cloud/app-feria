@@ -11,23 +11,25 @@ import json
 # ==========================================
 st.set_page_config(page_title="Punto de Venta Feria", layout="centered")
 
-LINK_CSV_BALANCE = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly0rwqfv3921uVRch3W7U_nXe-PLEU/edit?gid=832040050#gid=832040050" 
-LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQM5gsQcK0_77hP18d98tevZ2IaCmEahb8k3J-2Ey7ma5xb5L-YLc-NHQCUKxo8WJBY9Aw8Px5RV3kY/pub?output=csv"
+LINK_CSV_BALANCE = "TU_ENLACE_CSV_BALANCE" 
+LINK_NORMAL_DEL_EXCEL = "TU_ENLACE_EDICION_EXCEL"
 
 @st.cache_data(ttl=30)
 def cargar_inventario():
     try:
-        df = pd.read_csv(LINK_CSV_BALANCE, encoding='utf-8')
+        # ¡NUEVA LÓGICA!: sep=None y engine='python' detectan automáticamente si es , o ;
+        df = pd.read_csv(LINK_CSV_BALANCE, sep=None, engine='python', encoding='utf-8', on_bad_lines='skip')
+        
         df.columns = df.columns.str.strip()
         
+        # El resto del código sigue igual...
         if 'Emoji' in df.columns:
             df['Prod_Full'] = df['Emoji'].astype(str) + " " + df['Producto'].astype(str)
         else:
             df['Prod_Full'] = df['Producto'].astype(str)
             
         nombres_planos = dict(zip(df['Prod_Full'], df['Producto'].astype(str).str.strip()))
-            
-        df['Precio_Num'] = df['Precio'].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False)
+        df['Precio_Num'] = df['Precio'].astype(str).str.replace('$', '', regex=False).str.replace(',', '.', regex=False)
         precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio_Num'], errors='coerce').fillna(0)))
         
         col_stock = next((c for c in df.columns if "Stock" in c), None)
