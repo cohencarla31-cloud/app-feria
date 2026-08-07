@@ -17,28 +17,42 @@ LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQM5gsQ
 @st.cache_data(ttl=30)
 def cargar_inventario():
     try:
-        # ¡NUEVA LÓGICA!: sep=None y engine='python' detectan automáticamente si es , o ;
-        df = pd.read_csv(LINK_CSV_BALANCE, sep=None, engine='python', encoding='utf-8', on_bad_lines='skip')
-        
+        # Quitamos el sep=None para que lea estándar, pero esquivando las filas rotas
+        df = pd.read_csv(LINK_CSV_BALANCE, encoding='utf-8', on_bad_lines='skip')
         df.columns = df.columns.str.strip()
         
-        # El resto del código sigue igual...
-        if 'Emoji' in df.columns:
-            df['Prod_Full'] = df['Emoji'].astype(str) + " " + df['Producto'].astype(str)
-        else:
-            df['Prod_Full'] = df['Producto'].astype(str)
-            
-        nombres_planos = dict(zip(df['Prod_Full'], df['Producto'].astype(str).str.strip()))
-        df['Precio_Num'] = df['Precio'].astype(str).str.replace('$', '', regex=False).str.replace(',', '.', regex=False)
-        precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio_Num'], errors='coerce').fillna(0)))
+        # 1. Buscador inteligente de la columna Producto
+        col_prod = next((c for c in df.columns if "roducto" in c.lower()), None)
         
-        col_stock = next((c for c in df.columns if "Stock" in c), None)
+        if not col_prod:
+            # Si no la encuentra, nos avisa qué columnas está viendo realmente
+            raise ValueError(f"No encuentro la columna 'Producto'. Lo que veo en el Excel es: {list(df.columns)}")
+            
+        if 'Emoji' in df.columns:
+            df['Prod_Full'] = df['Emoji'].astype(str) + " " + df[col_prod].astype(str)
+        else:
+            df['Prod_Full'] = df[col_prod].astype(str)
+            
+        nombres_planos = dict(zip(df['Prod_Full'], df[col_prod].astype(str).str.strip()))
+            
+        # 2. Buscador inteligente de Precios
+        col_precio = next((c for c in df.columns if "recio" in c.lower()), None)
+        if col_precio:
+            df['Precio_Num'] = df[col_precio].astype(str).str.replace('$', '', regex=False).str.replace(',', '.', regex=False)
+            precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio_Num'], errors='coerce').fillna(0)))
+        else:
+            precios = {p: 0 for p in df['Prod_Full']}
+        
+        # 3. Buscador inteligente de Stock
+        col_stock = next((c for c in df.columns if "tock" in c.lower()), None)
         stock = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_stock], errors='coerce').fillna(99999))) if col_stock else {}
         
-        col_desc = next((c for c in df.columns if "Descuento" in c), None)
+        # 4. Buscador inteligente de Descuentos
+        col_desc = next((c for c in df.columns if "escuento" in c.lower()), None)
         descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0))) if col_desc else {p: 0 for p in df['Prod_Full']}
             
-        col_cat = next((c for c in df.columns if "Categor" in c or "categor" in c), None)
+        # 5. Buscador inteligente de Categorías
+        col_cat = next((c for c in df.columns if "ategor" in c.lower()), None)
         if col_cat:
             cats = df[col_cat].astype(str).str.strip().replace(['nan', 'None', ''], 'General')
             categorias = dict(zip(df['Prod_Full'], cats))
