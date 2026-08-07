@@ -179,69 +179,25 @@ st.divider()
 # 5. BOTONES DE ACCIÓN Y REGISTRO
 # ==========================================
 def limpiar_formulario():
-    # Esta función se ejecuta ANTES de recargar la pantalla, vaciando todo de raíz
-    st.session_state.clear()
+    # Recorremos la memoria y forzamos el reinicio exacto de cada cosa
+    for key in list(st.session_state.keys()):
+        if str(key).startswith("ms_"):
+            st.session_state[key] = []  # Vaciamos los buscadores de productos forzando una lista vacía
+        elif key in ["cliente", "tel_cliente"]:
+            st.session_state[key] = ""  # Vaciamos los textos
+        elif key == "vendedor":
+            st.session_state[key] = "Seleccionar..."
+        elif key == "caja":
+            st.session_state[key] = "Caja 1"
+        else:
+            del st.session_state[key]  # Borramos los kilos y gramos
 
 col_btn1, col_btn2 = st.columns(2)
 
 with col_btn1:
-    # El secreto está en el "on_click", que llama a la función de arriba
     st.button("🧹 Limpiar Pedido", on_click=limpiar_formulario)
 
 with col_btn2:
     if st.button("📝 Enviar Venta"):
         if vendedor == "Seleccionar..." or not cliente or total_general == 0:
-            st.warning("⚠️ Falta completar Vendedor, Cliente o ingresar cantidades.")
-        else:
-            try:
-                scopes = [
-                    "https://www.googleapis.com/auth/spreadsheets",
-                    "https://www.googleapis.com/auth/drive"
-                ]
-                creds = Credentials.from_service_account_info(json.loads(st.secrets["llave_google"]), scopes=scopes)
-                gc = gspread.authorize(creds)
-                sheet = gc.open_by_url(LINK_NORMAL_DEL_EXCEL).worksheet("Registro de Ventas")
-                
-                for p, d in pedidos.items():
-                    nombre_limpio = NOMBRES_PLANOS.get(p, p)
-                    sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, nombre_limpio, d['cant'], d['sub_final']])
-                
-                st.success("✅ Venta registrada correctamente en el Excel.")
-                
-                msg_caja = f"🛒 NUEVO PEDIDO\n👤 Vendedor: {vendedor}\n🗣️ Cliente: {cliente}\n-------------------\n"
-                for p, d in pedidos.items():
-                    if d['desc_pct'] > 0:
-                        msg_caja += f" • {d['cant']} x {p} = ${d['sub_final']:,.1f} (Aplica {int(d['desc_pct'])}% OFF)\n"
-                    else:
-                        msg_caja += f" • {d['cant']} x {p} = ${d['sub_final']:,.1f}\n"
-                
-                msg_caja += f"-------------------\n💰 TOTAL A COBRAR: ${total_general:,.1f}"
-                
-                num_caja = "59893343092" if caja == "Caja 1" else "59899111222"
-                url_caja = f"https://wa.me/{num_caja}?text={urllib.parse.quote(msg_caja)}"
-                
-                msg_cliente = f"👋 Hola {cliente}, aquí tienes el detalle de tu compra:\n-------------------\n"
-                for p, d in pedidos.items():
-                    if d['desc_pct'] > 0:
-                        msg_cliente += f" • {d['cant']} x {p} = ${d['sub_final']:,.1f} (🔥 {int(d['desc_pct'])}% OFF)\n"
-                    else:
-                        msg_cliente += f" • {d['cant']} x {p} = ${d['sub_final']:,.1f}\n"
-                
-                msg_cliente += f"-------------------\n💰 TOTAL: ${total_general:,.1f}\n"
-                if total_ahorro > 0:
-                    msg_cliente += f"🎁 Hoy ahorraste ${total_ahorro:,.1f}\n"
-                msg_cliente += f"\n¡Muchas gracias por elegirnos! 🍎"
-                
-                num_cliente = tel_cliente.replace(" ", "").replace("+", "")
-                url_cliente = f"https://wa.me/{num_cliente}?text={urllib.parse.quote(msg_cliente)}"
-                
-                st.info("👇 Haz clic en los botones para enviar los mensajes:")
-                st.link_button(f"📲 Enviar Resumen a {caja}", url_caja)
-                
-                if tel_cliente:
-                    st.link_button("📲 Enviar Ticket al Cliente", url_cliente)
-                else:
-                    st.caption("*(No se ingresó celular del cliente)*")
-                
-            except Exception as e:
-                st.error(f"❌ Error al registrar: {e}")
+# ... (y aquí hacia abajo sigue todo tu código de enviar venta que ya funciona perfecto) ...
