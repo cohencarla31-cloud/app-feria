@@ -80,14 +80,13 @@ st.title("🛒 Toma de Pedidos")
 
 col_datos1, col_datos2 = st.columns(2)
 with col_datos1:
-    vendedor = st.selectbox("Vendedor:", ["Seleccionar...", "Juan", "Pedro", "María", "Carlos"])
-    cliente = st.text_input("Nombre del Cliente:")
+    vendedor = st.selectbox("Vendedor:", ["Seleccionar...", "Juan", "Pedro", "María", "Carlos"], key="vendedor")
+    cliente = st.text_input("Nombre del Cliente:", key="cliente")
 with col_datos2:
-    caja = st.selectbox("¿A qué Caja se envía?", ["Caja 1", "Caja 2"])
-    tel_cliente = st.text_input("Celular del Cliente (Ej: 598...):")
+    caja = st.selectbox("¿A qué Caja se envía?", ["Caja 1", "Caja 2"], key="caja")
+    tel_cliente = st.text_input("Celular del Cliente (Ej: 598...):", key="tel_cliente")
 
 st.divider()
-
 # ==========================================
 # 3. BUSCADOR Y CATEGORÍAS
 # ==========================================
