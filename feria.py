@@ -7,259 +7,344 @@ from google.oauth2.service_account import Credentials
 import json
 
 # ==========================================
-# 1. CONFIGURACIÓN
+# 0. CONFIGURACIÓN DE PÁGINA
 # ==========================================
 st.set_page_config(page_title="Punto de Venta Feria", layout="centered")
 
+# ==========================================
+# 1. SISTEMA DE SEGURIDAD Y ROLES
+# ==========================================
+# Ahora definimos la clave y el ROL de cada persona.
+USUARIOS_PERMITIDOS = {
+    "Juan": {"clave": "juan123", "rol": "Vendedor"},
+    "Pedro": {"clave": "pedro456", "rol": "Vendedor"},
+    "María": {"clave": "maria789", "rol": "Vendedor"},
+    "Caja Principal": {"clave": "caja2026", "rol": "Admin"},
+    "Dueño": {"clave": "admin000", "rol": "Admin"}
+}
+
+if "usuario_logueado" not in st.session_state:
+    st.session_state.usuario_logueado = None
+    st.session_state.rol_logueado = None
+
+if st.session_state.usuario_logueado is None:
+    st.title("🔒 Acceso al Sistema")
+    st.write("Por favor, identifícate para comenzar a tomar pedidos.")
+    
+    with st.container():
+        st.write("---")
+        usuario_intento = st.selectbox("Usuario:", ["Seleccionar..."] + list(USUARIOS_PERMITIDOS.keys()))
+        clave_intento = st.text_input("Contraseña:", type="password")
+        
+        if st.button("🚪 Ingresar"):
+            if usuario_intento == "Seleccionar...":
+                st.warning("Selecciona un usuario válido.")
+            else:
+                datos_usuario = USUARIOS_PERMITIDOS.get(usuario_intento)
+                if datos_usuario["clave"] == clave_intento:
+                    st.session_state.usuario_logueado = usuario_intento
+                    st.session_state.rol_logueado = datos_usuario["rol"]
+                    st.rerun()
+                else:
+                    st.error("❌ Contraseña incorrecta.")
+    
+    st.stop() # Detiene el código si no hay login exitoso
+
+with st.sidebar:
+    color_rol = "🟢" if st.session_state.rol_logueado == "Vendedor" else "👑"
+    st.success(f"{color_rol} Usuario: **{st.session_state.usuario_logueado}**\n\nRol: {st.session_state.rol_logueado}")
+    if st.button("Cerrar Sesión"):
+        st.session_state.usuario_logueado = None
+        st.session_state.rol_logueado = None
+        st.rerun()
+
+# ==========================================
+# 2. INVENTARIO Y CONEXIONES (APP PRINCIPAL)
+# ==========================================
 LINK_CSV_BALANCE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQM5gsQcK0_77hP18d98tevZ2IaCmEahb8k3J-2Ey7ma5xb5L-YLc-NHQCUKxo8WJBY9Aw8Px5RV3kY/pub?output=csv" 
 LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly0rwqfv3921uVRch3W7U_nXe-PLEU/edit?gid=832040050#gid=832040050"
 
 @st.cache_data(ttl=30)
 def cargar_inventario():
     try:
-        # Quitamos el sep=None para que lea estándar, pero esquivando las filas rotas
         df = pd.read_csv(LINK_CSV_BALANCE, encoding='utf-8', on_bad_lines='skip')
         df.columns = df.columns.str.strip()
         
-        # 1. Buscador inteligente de la columna Producto
         col_prod = next((c for c in df.columns if "roducto" in c.lower()), None)
-        
-        if not col_prod:
-            # Si no la encuentra, nos avisa qué columnas está viendo realmente
-            raise ValueError(f"No encuentro la columna 'Producto'. Lo que veo en el Excel es: {list(df.columns)}")
-            
         if 'Emoji' in df.columns:
             df['Prod_Full'] = df['Emoji'].astype(str) + " " + df[col_prod].astype(str)
         else:
             df['Prod_Full'] = df[col_prod].astype(str)
             
         nombres_planos = dict(zip(df['Prod_Full'], df[col_prod].astype(str).str.strip()))
-            
-        # 2. Buscador inteligente de Precios
         col_precio = next((c for c in df.columns if "recio" in c.lower()), None)
-        if col_precio:
-            df['Precio_Num'] = df[col_precio].astype(str).str.replace('$', '', regex=False).str.replace(',', '.', regex=False)
-            precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio_Num'], errors='coerce').fillna(0)))
-        else:
-            precios = {p: 0 for p in df['Prod_Full']}
+        df['Precio_Num'] = df[col_precio].astype(str).str.replace('$', '', regex=False).str.replace(',', '.', regex=False) if col_precio else "0"
         
-        # 3. Buscador inteligente de Stock
-        col_stock = next((c for c in df.columns if "tock" in c.lower()), None)
-        stock = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_stock], errors='coerce').fillna(99999))) if col_stock else {}
-        
-        # 4. Buscador inteligente de Descuentos
+        precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio_Num'], errors='coerce').fillna(0)))
+        descuentos = {p: 0 for p in df['Prod_Full']}
         col_desc = next((c for c in df.columns if "escuento" in c.lower()), None)
-        descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0))) if col_desc else {p: 0 for p in df['Prod_Full']}
+        if col_desc:
+            descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0)))
             
-        # 5. Buscador inteligente de Categorías
-        col_cat = next((c for c in df.columns if "ategor" in c.lower()), None)
-        if col_cat:
-            cats = df[col_cat].astype(str).str.strip().replace(['nan', 'None', ''], 'General')
-            categorias = dict(zip(df['Prod_Full'], cats))
-        else:
-            categorias = {p: "General" for p in df['Prod_Full']}
-            
-        return df['Prod_Full'].tolist(), precios, stock, descuentos, nombres_planos, categorias
+        return df['Prod_Full'].tolist(), precios, descuentos, nombres_planos
     except Exception as e:
         st.error(f"Error al cargar datos: {e}")
-        return [], {}, {}, {}, {}, {}
+        return [], {}, {}, {}
 
-PRODUCTOS, PRECIOS, STOCK, DESCUENTOS, NOMBRES_PLANOS, CATEGORIAS = cargar_inventario()
+PRODUCTOS, PRECIOS, DESCUENTOS, NOMBRES_PLANOS = cargar_inventario()
 
-productos_por_cat = {}
-for p in PRODUCTOS:
-    cat = CATEGORIAS.get(p, "General")
-    if cat not in productos_por_cat:
-        productos_por_cat[cat] = []
-    productos_por_cat[cat].append(p)
+def obtener_ventas_hoy():
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(json.loads(st.secrets["llave_google"]), scopes=scopes)
+        gc = gspread.authorize(creds)
+        sheet = gc.open_by_url(LINK_NORMAL_DEL_EXCEL).worksheet("Registro de Ventas")
+        return sheet.get_all_values(), sheet
+    except Exception as e:
+        st.error("Error al conectar con Google Sheets.")
+        return [], None
 
-# ==========================================
-# 2. INTERFAZ Y DATOS
-# ==========================================
-st.title("🛒 Toma de Pedidos")
+if "carrito_vendedor" not in st.session_state: st.session_state.carrito_vendedor = []
+if "carrito_cajero" not in st.session_state: st.session_state.carrito_cajero = []
 
-col_datos1, col_datos2 = st.columns(2)
-with col_datos1:
-    vendedor = st.selectbox("Vendedor:", ["Seleccionar...", "Juan", "Pedro", "María", "Carlos"], key="vendedor")
-    cliente = st.text_input("Nombre del Cliente:", key="cliente")
-with col_datos2:
-    caja = st.selectbox("¿A qué Caja se envía?", ["Caja 1", "Caja 2"], key="caja")
-    tel_cliente = st.text_input("Celular del Cliente (Ej: 598...):", key="tel_cliente")
+st.title("🛒 Sistema de Feria")
 
-st.divider()
-# ==========================================
-# 3. BUSCADOR Y CATEGORÍAS
-# ==========================================
-pedidos = {}
-total_general = 0.0
-total_ahorro = 0.0
-
-st.write("### 🔍 Catálogo de Productos")
-nombres_cats = sorted(list(productos_por_cat.keys()))
-productos_seleccionados = []
-
-nombres_tabs = ["🔍 Todo el Catálogo"] + nombres_cats
-tabs = st.tabs(nombres_tabs)
-
-with tabs[0]:
-    sel_todo = st.multiselect(
-        "Escribe aquí para buscar en cualquier rubro:", 
-        options=PRODUCTOS, 
-        key="ms_todo",
-        placeholder="Ej: Orégano, Papa, Queso..."
-    )
-    productos_seleccionados.extend(sel_todo)
-
-for i, cat in enumerate(nombres_cats):
-    with tabs[i+1]:
-        sel = st.multiselect(f"Seleccionar dentro de {cat}:", options=productos_por_cat[cat], key=f"ms_{cat}")
-        productos_seleccionados.extend(sel)
-
-productos_seleccionados = list(dict.fromkeys(productos_seleccionados))
-
-if productos_seleccionados:
-    st.write("### 📝 Detalle del Pedido")
+# --- LÓGICA DE PESTAÑAS SEGÚN EL ROL ---
+if st.session_state.rol_logueado == "Admin":
+    # El Admin ve 3 pestañas
+    tabs = st.tabs(["📝 Tomar Pedido", "💻 Retomar y Cobrar (Caja)", "📊 Panel Admin (Resumen)"])
+    tab_vendedor = tabs[0]
+    tab_cajero = tabs[1]
+    tab_admin = tabs[2]
+else:
+    # El Vendedor ve solo 2 pestañas
+    tabs = st.tabs(["📝 Tomar Pedido", "💻 Retomar y Cobrar (Caja)"])
+    tab_vendedor = tabs[0]
+    tab_cajero = tabs[1]
+    tab_admin = None
 
 # ==========================================
-# 4. INGRESO RÁPIDO DE KILOS/GRAMOS O UNIDADES
+# PESTAÑA 1: MODO VENDEDOR
 # ==========================================
-for p in productos_seleccionados:
-    desc_pct = DESCUENTOS.get(p, 0)
-    label_producto = f"🔥 {p} ({int(desc_pct)}% OFF)" if desc_pct > 0 else f"{p}"
+with tab_vendedor:
+    st.write("### Datos del Cliente")
+    col1, col2 = st.columns(2)
+    with col1:
+        vendedor = st.session_state.usuario_logueado
+        st.text_input("Vendedor:", value=vendedor, disabled=True) # Bloqueado, toma su propio nombre
+        cliente = st.text_input("Nombre del Cliente:", key="cliente")
+    with col2:
+        caja = st.selectbox("¿A qué Caja se envía?", ["Caja 1", "Caja 2"], key="caja")
+        tel_cliente = st.text_input("Celular del Cliente (Ej: 598...):", key="tel_cliente")
     
-    st.write(f"**{label_producto}**")
+    st.divider()
+    st.write("### 🔍 Buscador de Productos")
     
-    # Lógica inteligente para saber si es por peso o por unidad
-    if "unidad" in p.lower() or "(u)" in p.lower():
-        cant = st.number_input("Unidades:", min_value=0, step=1, key=f"uni_{p}")
-        if cant > 0:
-            st.caption(f"📦 *Entendí:* **{int(cant)} unidad(es)**")
-    else:
-        # Partimos la pantalla en dos columnas para Kilos y Gramos
-        col_kilos, col_gramos = st.columns(2)
-        with col_kilos:
-            kilos = st.number_input("Kilos:", min_value=0, step=1, key=f"kilos_{p}")
-        with col_gramos:
-            # Los gramos suman de a 50 (es muy útil en la balanza)
-            gramos = st.number_input("Gramos:", min_value=0, max_value=999, step=50, key=f"gramos_{p}")
-            
-        # Unimos las dos cajas en un solo número matemático
-        cant = kilos + (gramos / 1000.0)
+    col_busc, col_btn = st.columns([8, 2])
+    with col_busc:
+        prod_buscado = st.selectbox("Escribe o busca el producto:", ["Seleccionar..."] + PRODUCTOS, key="buscador_vendedor")
+    with col_btn:
+        st.write("")
+        st.write("")
+        if st.button("➕ Agregar"):
+            if prod_buscado != "Seleccionar..." and prod_buscado not in st.session_state.carrito_vendedor:
+                st.session_state.carrito_vendedor.append(prod_buscado)
+                st.rerun()
+
+    pedidos_vendedor = {}
+    total_vendedor = 0.0
+
+    if st.session_state.carrito_vendedor:
+        st.write("### 🛒 Tu Carrito")
         
-        if cant > 0:
-            if kilos > 0 and gramos > 0:
-                st.caption(f"⚖️ *Entendí:* **{int(kilos)} Kilo(s) y {int(gramos)} gramos**")
-            elif kilos > 0 and gramos == 0:
-                st.caption(f"⚖️ *Entendí:* **{int(kilos)} Kilo(s) exactos**")
-            elif kilos == 0 and gramos > 0:
-                st.caption(f"⚖️ *Entendí:* **{int(gramos)} gramos**")
-    
-    # Calcular precios solo si ingresó alguna cantidad
-    if cant > 0:
-        precio_orig = PRECIOS.get(p, 0)
-        precio_final = precio_orig * (1 - (desc_pct / 100))
-        
-        sub_final = cant * precio_final
-        ahorro = (cant * precio_orig) - sub_final
-        
-        pedidos[p] = {"cant": cant, "sub_final": sub_final, "desc_pct": desc_pct}
-        total_general += sub_final
-        total_ahorro += ahorro
-
-st.divider()
-
-st.write(f"### TOTAL A COBRAR: ${total_general:,.1f}")
-if total_ahorro > 0:
-    st.caption(f"*(El cliente ahorró ${total_ahorro:,.1f} en descuentos)*")
-
-st.divider()
-
-# ==========================================
-# 5. BOTONES DE ACCIÓN Y REGISTRO
-# ==========================================
-def limpiar_formulario():
-    # Recorremos la memoria y forzamos el reinicio exacto de cada cosa
-    for key in list(st.session_state.keys()):
-        if str(key).startswith("ms_"):
-            # Vaciamos los buscadores de productos forzando una lista vacía
-            st.session_state[key] = []  
-        elif key in ["cliente", "tel_cliente"]:
-            # Vaciamos los textos
-            st.session_state[key] = ""  
-        elif key == "vendedor":
-            # Al vendedor lo volvemos a su estado inicial
-            st.session_state[key] = "Seleccionar..."
-        elif key == "caja":
-            # A la caja la volvemos a su estado inicial
-            st.session_state[key] = "Caja 1"
-        else:
-            # Borramos los contadores de kilos, gramos y unidades
-            del st.session_state[key]  
-
-col_btn1, col_btn2 = st.columns(2)
-
-with col_btn1:
-    # Llamamos a la función de arriba ANTES de recargar la página
-    st.button("🧹 Limpiar Pedido", on_click=limpiar_formulario)
-
-with col_btn2:
-    if st.button("📝 Enviar Venta"):
-        if vendedor == "Seleccionar..." or not cliente or total_general == 0:
-            st.warning("⚠️ Falta completar Vendedor, Cliente o ingresar cantidades.")
-        else:
-            try:
-                scopes = [
-                    "https://www.googleapis.com/auth/spreadsheets",
-                    "https://www.googleapis.com/auth/drive"
-                ]
-                creds = Credentials.from_service_account_info(json.loads(st.secrets["llave_google"]), scopes=scopes)
-                gc = gspread.authorize(creds)
-                sheet = gc.open_by_url(LINK_NORMAL_DEL_EXCEL).worksheet("Registro de Ventas")
+        for p in st.session_state.carrito_vendedor:
+            with st.container():
+                col_nombre, col_quitar = st.columns([8, 2])
+                col_nombre.markdown(f"**{p}**")
+                if col_quitar.button("❌ Quitar", key=f"del_vend_{p}"):
+                    st.session_state.carrito_vendedor.remove(p)
+                    st.rerun()
                 
-                # Anotamos en Excel
-                for p, d in pedidos.items():
-                    nombre_limpio = NOMBRES_PLANOS.get(p, p)
-                    sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, nombre_limpio, d['cant'], d['sub_final']])
+                es_unidad = "unidad" in p.lower() or "(u)" in p.lower()
+                tipo_medida = st.radio("Se vende por:", ["Peso (Kgs/Grs)", "Unidades"], index=1 if es_unidad else 0, key=f"medida_vend_{p}", horizontal=True)
                 
-                st.success("✅ Venta registrada correctamente en el Excel.")
-                
-                # Armamos Ticket para la Caja
-                msg_caja = f"🛒 NUEVO PEDIDO\n👤 Vendedor: {vendedor}\n🗣️ Cliente: {cliente}\n-------------------\n"
-                for p, d in pedidos.items():
-                    if d['desc_pct'] > 0:
-                        msg_caja += f" • {d['cant']} x {p} = ${d['sub_final']:,.1f} (Aplica {int(d['desc_pct'])}% OFF)\n"
-                    else:
-                        msg_caja += f" • {d['cant']} x {p} = ${d['sub_final']:,.1f}\n"
-                
-                msg_caja += f"-------------------\n💰 TOTAL A COBRAR: ${total_general:,.1f}"
-                
-                num_caja = "59893343092" if caja == "Caja 1" else "59899111222"
-                url_caja = f"https://wa.me/{num_caja}?text={urllib.parse.quote(msg_caja)}"
-                
-                # Armamos Ticket para el Cliente
-                msg_cliente = f"👋 Hola {cliente}, aquí tienes el detalle de tu compra:\n-------------------\n"
-                for p, d in pedidos.items():
-                    if d['desc_pct'] > 0:
-                        msg_cliente += f" • {d['cant']} x {p} = ${d['sub_final']:,.1f} (🔥 {int(d['desc_pct'])}% OFF)\n"
-                    else:
-                        msg_cliente += f" • {d['cant']} x {p} = ${d['sub_final']:,.1f}\n"
-                
-                msg_cliente += f"-------------------\n💰 TOTAL: ${total_general:,.1f}\n"
-                if total_ahorro > 0:
-                    msg_cliente += f"🎁 Hoy ahorraste ${total_ahorro:,.1f}\n"
-                msg_cliente += f"\n¡Muchas gracias por elegirnos! 🍎"
-                
-                num_cliente = tel_cliente.replace(" ", "").replace("+", "")
-                url_cliente = f"https://wa.me/{num_cliente}?text={urllib.parse.quote(msg_cliente)}"
-                
-                # Mostramos los botones de envío
-                st.info("👇 Haz clic en los botones para enviar los mensajes:")
-                st.link_button(f"📲 Enviar Resumen a {caja}", url_caja)
-                
-                if tel_cliente:
-                    st.link_button("📲 Enviar Ticket al Cliente", url_cliente)
+                if tipo_medida == "Unidades":
+                    cant = st.number_input("Cantidad (Unidades):", min_value=0, step=1, key=f"uni_vend_{p}")
+                    cant_txt = f"{int(cant)} Unidades"
                 else:
-                    st.caption("*(No se ingresó celular del cliente)*")
+                    c_kilos, c_gramos = st.columns(2)
+                    with c_kilos: kilos = st.number_input("Kilos:", min_value=0, step=1, key=f"kg_vend_{p}")
+                    with c_gramos: gramos = st.number_input("Gramos:", min_value=0, max_value=999, step=50, key=f"gr_vend_{p}")
+                    cant = kilos + (gramos / 1000.0)
+                    cant_txt = f"{cant:.3f} Kgs"
+
+                if cant > 0:
+                    precio = PRECIOS.get(p, 0)
+                    subtotal = cant * (precio * (1 - (DESCUENTOS.get(p, 0) / 100)))
+                    pedidos_vendedor[p] = {"cant": cant, "cant_txt": cant_txt, "subtotal": subtotal}
+                    total_vendedor += subtotal
+                st.divider()
+
+    if total_vendedor > 0:
+        st.write(f"### Subtotal: ${total_vendedor:,.1f}")
+        if st.button("🚀 Enviar a Caja"):
+            if not cliente:
+                st.warning("Falta completar el nombre del Cliente.")
+            else:
+                _, sheet = obtener_ventas_hoy()
+                if sheet:
+                    for p, d in pedidos_vendedor.items():
+                        sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], tel_cliente])
+                    
+                    st.success("✅ Pedido enviado a Caja y guardado en Excel.")
+                    
+                    msg_caja = f"🛒 NUEVO PEDIDO\n👤 Vend: {vendedor} | Cliente: {cliente}\n📱 Tel: {tel_cliente}\n-------------------\n"
+                    for p, d in pedidos_vendedor.items():
+                        msg_caja += f" • {d['cant_txt']} x {p} = ${d['subtotal']:,.1f}\n"
+                    msg_caja += f"-------------------\n💰 TOTAL: ${total_vendedor:,.1f}\n\n*Ya puedes retomar este pedido en la Pestaña Cajero.*"
+                    
+                    num_caja = "59893343092" if caja == "Caja 1" else "59899111222"
+                    st.link_button(f"📲 Avisar a {caja} por WhatsApp", f"https://wa.me/{num_caja}?text={urllib.parse.quote(msg_caja)}")
+                    
+                    st.session_state.carrito_vendedor = []
+
+# ==========================================
+# PESTAÑA 2: MODO CAJERO (Retomar/Agregar/Cobrar)
+# ==========================================
+with tab_cajero:
+    st.write("### 🔎 Buscar Pedidos Pendientes de Hoy")
+    if st.button("🔄 Actualizar Base de Datos"):
+        st.rerun()
+        
+    datos, sheet_caja = obtener_ventas_hoy()
+    hoy_str = str(date.today())
+    clientes_hoy = {}
+    
+    # Esto busca a TODOS los clientes de TODOS los vendedores de hoy
+    for row in datos:
+        if len(row) >= 7 and row[0] == hoy_str:
+            c_nombre = row[3]
+            c_prod = row[4]
+            c_subt = float(row[6]) if row[6] else 0.0
+            c_cel = row[7] if len(row) >= 8 else ""
+            
+            if c_nombre not in clientes_hoy:
+                clientes_hoy[c_nombre] = {"productos": [], "total": 0.0, "celular": c_cel}
+            
+            clientes_hoy[c_nombre]["productos"].append(f"{c_prod} (${c_subt:,.1f})")
+            clientes_hoy[c_nombre]["total"] += c_subt
+
+    lista_clientes = ["Seleccionar Cliente..."] + list(clientes_hoy.keys())
+    cliente_seleccionado = st.selectbox("Selecciona el Cliente a cobrar:", lista_clientes)
+    
+    if cliente_seleccionado != "Seleccionar Cliente...":
+        datos_cliente = clientes_hoy[cliente_seleccionado]
+        tel_cajero = st.text_input("Celular del Cliente:", value=datos_cliente["celular"], key="tel_cajero")
+        
+        st.info(f"**Ya pidió hoy (${datos_cliente['total']:,.1f}):**\n\n" + "\n".join([f"• {p}" for p in datos_cliente["productos"]]))
+        
+        st.divider()
+        st.write("### ➕ ¿Quiere agregar algo más en la caja?")
+        
+        col_busc_c, col_btn_c = st.columns([8, 2])
+        with col_busc_c:
+            prod_caja = st.selectbox("Buscar extra:", ["Seleccionar..."] + PRODUCTOS, key="buscador_cajero")
+        with col_btn_c:
+            st.write("")
+            st.write("")
+            if st.button("➕ Agregar Extra"):
+                if prod_caja != "Seleccionar..." and prod_caja not in st.session_state.carrito_cajero:
+                    st.session_state.carrito_cajero.append(prod_caja)
+                    st.rerun()
+        
+        pedidos_extra = {}
+        total_extra = 0.0
+        
+        for p in st.session_state.carrito_cajero:
+            with st.container():
+                col_nombre, col_quitar = st.columns([8, 2])
+                col_nombre.markdown(f"**{p}**")
+                if col_quitar.button("❌ Quitar", key=f"del_caj_{p}"):
+                    st.session_state.carrito_cajero.remove(p)
+                    st.rerun()
                 
-            except Exception as e:
-                st.error(f"❌ Error al registrar: {e}")
+                es_unidad = "unidad" in p.lower() or "(u)" in p.lower()
+                tipo_medida = st.radio("Se vende por:", ["Peso (Kgs/Grs)", "Unidades"], index=1 if es_unidad else 0, key=f"medida_caj_{p}", horizontal=True)
+                
+                if tipo_medida == "Unidades":
+                    cant = st.number_input("Cantidad (Unidades):", min_value=0, step=1, key=f"uni_caj_{p}")
+                    cant_txt = f"{int(cant)} Unidades"
+                else:
+                    c_kilos, c_gramos = st.columns(2)
+                    with c_kilos: kilos = st.number_input("Kilos:", min_value=0, step=1, key=f"kg_caj_{p}")
+                    with c_gramos: gramos = st.number_input("Gramos:", min_value=0, max_value=999, step=50, key=f"gr_caj_{p}")
+                    cant = kilos + (gramos / 1000.0)
+                    cant_txt = f"{cant:.3f} Kgs"
+
+                if cant > 0:
+                    precio = PRECIOS.get(p, 0)
+                    subtotal = cant * (precio * (1 - (DESCUENTOS.get(p, 0) / 100)))
+                    pedidos_extra[p] = {"cant": cant, "cant_txt": cant_txt, "subtotal": subtotal}
+                    total_extra += subtotal
+                st.divider()
+        
+        gran_total = datos_cliente['total'] + total_extra
+        st.write(f"### 💰 GRAN TOTAL A COBRAR: ${gran_total:,.1f}")
+        
+        if st.button("✅ Cerrar Venta y Enviar Ticket al Cliente"):
+            if sheet_caja and pedidos_extra:
+                for p, d in pedidos_extra.items():
+                    sheet_caja.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_seleccionado, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], tel_cajero])
+            
+            msg_final = f"👋 Hola {cliente_seleccionado}, gracias por comprar en la feria.\n\n"
+            msg_final += f"🧾 *RESUMEN DE TU COMPRA:*\n"
+            msg_final += "\n".join([f"• {p}" for p in datos_cliente["productos"]]) + "\n"
+            if pedidos_extra:
+                msg_final += "\n".join([f"• {d['cant_txt']} x {p} (${d['subtotal']:,.1f})" for p, d in pedidos_extra.items()]) + "\n"
+            msg_final += f"-------------------\n💰 TOTAL ABONADO: ${gran_total:,.1f}\n\n¡Que lo disfrutes! 🍎"
+            
+            if tel_cajero:
+                num_cliente = tel_cajero.replace(" ", "").replace("+", "")
+                st.link_button("📲 Enviar Ticket FINAL al Cliente", f"https://wa.me/{num_cliente}?text={urllib.parse.quote(msg_final)}")
+            else:
+                st.warning("⚠️ No hay número de celular para enviar el ticket, pero la venta se registró.")
+            
+            st.session_state.carrito_cajero = []
+
+# ==========================================
+# PESTAÑA 3: PANEL ADMIN (Oculta para vendedores)
+# ==========================================
+if tab_admin:
+    with tab_admin:
+        st.write("### 📊 Panel de Control del Día")
+        st.caption("Solo los administradores o cajas pueden ver esta sección.")
+        
+        datos_admin, _ = obtener_ventas_hoy()
+        
+        if datos_admin:
+            # Quitamos el encabezado de las filas (asumiendo que la primera fila es título)
+            # Y creamos una tabla estructurada para analizarla fácilmente
+            df_ventas = pd.DataFrame(datos_admin, columns=["Fecha", "Hora", "Vendedor", "Cliente", "Producto", "Cantidad", "Subtotal", "Celular", "Extra", "Extra2", "Extra3"].copy(deep=False)).iloc[:, :8]
+            
+            # Filtramos solo lo de hoy
+            df_ventas_hoy = df_ventas[df_ventas["Fecha"] == str(date.today())].copy()
+            
+            if not df_ventas_hoy.empty:
+                # Convertimos subtotales a números
+                df_ventas_hoy["Subtotal"] = pd.to_numeric(df_ventas_hoy["Subtotal"], errors="coerce").fillna(0)
+                
+                total_recaudado = df_ventas_hoy["Subtotal"].sum()
+                
+                # Tarjetas grandes con los números
+                st.metric(label="💰 Recaudación Total de Hoy", value=f"${total_recaudado:,.1f}")
+                
+                st.write("---")
+                st.write("#### 🏆 Ventas por Vendedor")
+                ventas_por_vend = df_ventas_hoy.groupby("Vendedor")["Subtotal"].sum().reset_index()
+                
+                # Le damos formato lindo de moneda
+                ventas_por_vend["Subtotal"] = ventas_por_vend["Subtotal"].apply(lambda x: f"${x:,.1f}")
+                st.dataframe(ventas_por_vend, hide_index=True, use_container_width=True)
+                
+            else:
+                st.info("Todavía no hay ventas registradas en el día de hoy.")
