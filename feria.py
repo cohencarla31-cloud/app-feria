@@ -1,15 +1,18 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime
+from datetime import datetime, timedelta, timezone
 import urllib.parse
 import gspread
 from google.oauth2.service_account import Credentials
 import json
 
 # ==========================================
-# 0. CONFIGURACIÓN DE PÁGINA
+# 0. CONFIGURACIÓN DE PÁGINA Y HORA
 # ==========================================
 st.set_page_config(page_title="Punto de Venta Feria", layout="centered")
+
+# Fijamos la zona horaria a Uruguay (UTC -3) para evitar problemas de servidor
+TZ_UY = timezone(timedelta(hours=-3))
 
 # ==========================================
 # 1. SISTEMA DE SEGURIDAD Y ROLES
@@ -66,7 +69,6 @@ LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly
 @st.cache_data(ttl=30)
 def cargar_inventario():
     try:
-        # ARREGLO: Lectura robusta para que no falte ningún producto (Ej: Zanahoria)
         df = pd.read_csv(LINK_CSV_BALANCE, dtype=str).fillna("")
         df.columns = df.columns.str.strip()
         
@@ -86,7 +88,6 @@ def cargar_inventario():
         if col_desc:
             descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0)))
             
-        # Filtramos para no mostrar celdas vacías como productos
         productos_reales = [p for p in df['Prod_Full'].tolist() if p.strip() != ""]
         return productos_reales, precios, descuentos, nombres_planos
     except Exception as e:
@@ -134,7 +135,6 @@ with tab_vendedor:
     with col2:
         caja = st.selectbox("¿A qué Caja se envía?", ["Caja 1", "Caja 2"], key="caja")
         
-    # El vendedor solo anota el nombre del cliente
     cliente = st.text_input("Nombre del Cliente:", key="cliente", placeholder="Ej: María Gómez")
     
     st.divider()
@@ -187,7 +187,6 @@ with tab_vendedor:
 
     if total_vendedor > 0:
         st.write(f"### Subtotal: ${total_vendedor:,.1f}")
-        
         st.info("💡 Si el cliente quiere más cosas después de enviar esto, simplemente haz un nuevo pedido con su mismo nombre.")
         
         if st.button("🚀 Enviar a Caja"):
@@ -196,13 +195,16 @@ with tab_vendedor:
             else:
                 _, sheet = obtener_ventas_hoy()
                 if sheet:
+                    # Aplicamos la hora exacta de Uruguay
+                    ahora_uy = datetime.now(TZ_UY)
+                    fecha_str = ahora_uy.strftime("%Y-%m-%d")
+                    hora_str = ahora_uy.strftime("%H:%M:%S")
+                    
                     for p, d in pedidos_vendedor.items():
-                        # Guardamos en Excel sin celular (se lo pedirá la caja luego)
-                        sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], ""])
+                        sheet.append_row([fecha_str, hora_str, vendedor, cliente, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], ""])
                     
                     st.success("✅ Pedido enviado a Caja.")
                     
-                    # Mensaje interno para la caja (Sin número de cliente)
                     msg_caja = f"🛒 NUEVO PEDIDO\n👤 Vendedor: {vendedor}\n🗣️ Cliente: {cliente}\n-------------------\n"
                     for p, d in pedidos_vendedor.items():
                         msg_caja += f" • {d['cant_txt']} x {p} = ${d['subtotal']:,.1f}\n"
@@ -222,10 +224,10 @@ with tab_cajero:
         st.rerun()
         
     datos, sheet_caja = obtener_ventas_hoy()
-    hoy_str = str(date.today())
+    # Filtramos pidiendo la fecha exacta de Uruguay
+    hoy_str = datetime.now(TZ_UY).strftime("%Y-%m-%d")
     clientes_hoy = {}
     
-    # Busca a TODOS los clientes de hoy, sumando lo de todos los vendedores
     for row in datos:
         if len(row) >= 7 and row[0] == hoy_str:
             c_nombre = row[3]
@@ -244,8 +246,6 @@ with tab_cajero:
     
     if cliente_seleccionado != "Seleccionar Cliente...":
         datos_cliente = clientes_hoy[cliente_seleccionado]
-        
-        # El Cajero es quien pide el celular final
         tel_cajero = st.text_input("Celular del Cliente (Para enviar el ticket):", value=datos_cliente["celular"], key="tel_cajero")
         
         st.info(f"**El cliente ya pidió (${datos_cliente['total']:,.1f}):**\n\n" + "\n".join([f"• {p}" for p in datos_cliente["productos"]]))
@@ -300,11 +300,14 @@ with tab_cajero:
         
         if st.button("✅ Cerrar Venta y Enviar Ticket al Cliente"):
             if sheet_caja and pedidos_extra:
+                # Aplicamos la hora exacta de Uruguay también aquí
+                ahora_uy = datetime.now(TZ_UY)
+                fecha_str = ahora_uy.strftime("%Y-%m-%d")
+                hora_str = ahora_uy.strftime("%H:%M:%S")
+                
                 for p, d in pedidos_extra.items():
-                    # El extra se guarda bajo el nombre del cajero logueado
-                    sheet_caja.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_seleccionado, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], tel_cajero])
+                    sheet_caja.append_row([fecha_str, hora_str, st.session_state.usuario_logueado, cliente_seleccionado, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], tel_cajero])
             
-            # Solo el Cajero tiene el botón que arma el mensaje amigable para el cliente final
             msg_final = f"👋 Hola {cliente_seleccionado}, gracias por comprar en la feria.\n\n"
             msg_final += f"🧾 *RESUMEN DE TU COMPRA:*\n"
             msg_final += "\n".join([f"• {p}" for p in datos_cliente["productos"]]) + "\n"
@@ -341,7 +344,9 @@ if tab_admin:
             if df_ventas.iloc[0]["Fecha"].lower() == "fecha":
                 df_ventas = df_ventas.iloc[1:]
             
-            df_ventas_hoy = df_ventas[df_ventas["Fecha"] == str(date.today())].copy()
+            # Filtramos también por la fecha de Uruguay actual
+            hoy_str = datetime.now(TZ_UY).strftime("%Y-%m-%d")
+            df_ventas_hoy = df_ventas[df_ventas["Fecha"] == hoy_str].copy()
             
             if not df_ventas_hoy.empty:
                 df_ventas_hoy["Subtotal"] = pd.to_numeric(df_ventas_hoy["Subtotal"].astype(str).str.replace(',', '.'), errors="coerce").fillna(0)
