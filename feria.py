@@ -14,7 +14,6 @@ st.set_page_config(page_title="Punto de Venta Feria", layout="centered")
 # ==========================================
 # 1. SISTEMA DE SEGURIDAD Y ROLES
 # ==========================================
-# Ahora definimos la clave y el ROL de cada persona.
 USUARIOS_PERMITIDOS = {
     "Juan": {"clave": "juan123", "rol": "Vendedor"},
     "Pedro": {"clave": "pedro456", "rol": "Vendedor"},
@@ -48,7 +47,7 @@ if st.session_state.usuario_logueado is None:
                 else:
                     st.error("❌ Contraseña incorrecta.")
     
-    st.stop() # Detiene el código si no hay login exitoso
+    st.stop() 
 
 with st.sidebar:
     color_rol = "🟢" if st.session_state.rol_logueado == "Vendedor" else "👑"
@@ -109,15 +108,12 @@ if "carrito_cajero" not in st.session_state: st.session_state.carrito_cajero = [
 
 st.title("🛒 Sistema de Feria")
 
-# --- LÓGICA DE PESTAÑAS SEGÚN EL ROL ---
 if st.session_state.rol_logueado == "Admin":
-    # El Admin ve 3 pestañas
-    tabs = st.tabs(["📝 Tomar Pedido", "💻 Retomar y Cobrar (Caja)", "📊 Panel Admin (Resumen)"])
+    tabs = st.tabs(["📝 Tomar Pedido", "💻 Retomar y Cobrar (Caja)", "📊 Panel Admin"])
     tab_vendedor = tabs[0]
     tab_cajero = tabs[1]
     tab_admin = tabs[2]
 else:
-    # El Vendedor ve solo 2 pestañas
     tabs = st.tabs(["📝 Tomar Pedido", "💻 Retomar y Cobrar (Caja)"])
     tab_vendedor = tabs[0]
     tab_cajero = tabs[1]
@@ -131,7 +127,7 @@ with tab_vendedor:
     col1, col2 = st.columns(2)
     with col1:
         vendedor = st.session_state.usuario_logueado
-        st.text_input("Vendedor:", value=vendedor, disabled=True) # Bloqueado, toma su propio nombre
+        st.text_input("Vendedor:", value=vendedor, disabled=True) 
         cliente = st.text_input("Nombre del Cliente:", key="cliente")
     with col2:
         caja = st.selectbox("¿A qué Caja se envía?", ["Caja 1", "Caja 2"], key="caja")
@@ -209,7 +205,7 @@ with tab_vendedor:
                     st.session_state.carrito_vendedor = []
 
 # ==========================================
-# PESTAÑA 2: MODO CAJERO (Retomar/Agregar/Cobrar)
+# PESTAÑA 2: MODO CAJERO
 # ==========================================
 with tab_cajero:
     st.write("### 🔎 Buscar Pedidos Pendientes de Hoy")
@@ -220,7 +216,6 @@ with tab_cajero:
     hoy_str = str(date.today())
     clientes_hoy = {}
     
-    # Esto busca a TODOS los clientes de TODOS los vendedores de hoy
     for row in datos:
         if len(row) >= 7 and row[0] == hoy_str:
             c_nombre = row[3]
@@ -321,30 +316,41 @@ if tab_admin:
         
         datos_admin, _ = obtener_ventas_hoy()
         
-        if datos_admin:
-            # Quitamos el encabezado de las filas (asumiendo que la primera fila es título)
-            # Y creamos una tabla estructurada para analizarla fácilmente
-            df_ventas = pd.DataFrame(datos_admin, columns=["Fecha", "Hora", "Vendedor", "Cliente", "Producto", "Cantidad", "Subtotal", "Celular", "Extra", "Extra2", "Extra3"].copy(deep=False)).iloc[:, :8]
+        if datos_admin and len(datos_admin) > 1:
+            # 1. Cargamos todo a un DataFrame
+            df_ventas = pd.DataFrame(datos_admin)
             
-            # Filtramos solo lo de hoy
+            # 2. Aseguramos tener al menos 8 columnas para no romper el código si el excel tiene menos
+            for i in range(len(df_ventas.columns), 8):
+                df_ventas[i] = ""
+                
+            # 3. Recortamos a 8 columnas y nombramos
+            df_ventas = df_ventas.iloc[:, :8]
+            df_ventas.columns = ["Fecha", "Hora", "Vendedor", "Cliente", "Producto", "Cantidad", "Subtotal", "Celular"]
+            
+            # 4. Eliminamos la fila de títulos si existe (normalmente la fila 0)
+            if df_ventas.iloc[0]["Fecha"].lower() == "fecha":
+                df_ventas = df_ventas.iloc[1:]
+            
+            # 5. Filtramos solo lo de hoy
             df_ventas_hoy = df_ventas[df_ventas["Fecha"] == str(date.today())].copy()
             
             if not df_ventas_hoy.empty:
-                # Convertimos subtotales a números
-                df_ventas_hoy["Subtotal"] = pd.to_numeric(df_ventas_hoy["Subtotal"], errors="coerce").fillna(0)
+                # Convertimos subtotales asegurando formato numérico (evita errores con comas o textos)
+                df_ventas_hoy["Subtotal"] = pd.to_numeric(df_ventas_hoy["Subtotal"].astype(str).str.replace(',', '.'), errors="coerce").fillna(0)
                 
                 total_recaudado = df_ventas_hoy["Subtotal"].sum()
                 
-                # Tarjetas grandes con los números
                 st.metric(label="💰 Recaudación Total de Hoy", value=f"${total_recaudado:,.1f}")
                 
                 st.write("---")
                 st.write("#### 🏆 Ventas por Vendedor")
                 ventas_por_vend = df_ventas_hoy.groupby("Vendedor")["Subtotal"].sum().reset_index()
                 
-                # Le damos formato lindo de moneda
                 ventas_por_vend["Subtotal"] = ventas_por_vend["Subtotal"].apply(lambda x: f"${x:,.1f}")
                 st.dataframe(ventas_por_vend, hide_index=True, use_container_width=True)
                 
             else:
                 st.info("Todavía no hay ventas registradas en el día de hoy.")
+        else:
+            st.info("El Registro de Ventas está vacío. Comienza a tomar pedidos.")
