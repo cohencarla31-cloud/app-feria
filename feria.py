@@ -66,7 +66,8 @@ LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly
 @st.cache_data(ttl=30)
 def cargar_inventario():
     try:
-        df = pd.read_csv(LINK_CSV_BALANCE, encoding='utf-8', on_bad_lines='skip')
+        # ARREGLO: Lectura robusta para que no falte ningún producto (Ej: Zanahoria)
+        df = pd.read_csv(LINK_CSV_BALANCE, dtype=str).fillna("")
         df.columns = df.columns.str.strip()
         
         col_prod = next((c for c in df.columns if "roducto" in c.lower()), None)
@@ -85,7 +86,9 @@ def cargar_inventario():
         if col_desc:
             descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0)))
             
-        return df['Prod_Full'].tolist(), precios, descuentos, nombres_planos
+        # Filtramos para no mostrar celdas vacías como productos
+        productos_reales = [p for p in df['Prod_Full'].tolist() if p.strip() != ""]
+        return productos_reales, precios, descuentos, nombres_planos
     except Exception as e:
         st.error(f"Error al cargar datos: {e}")
         return [], {}, {}, {}
@@ -128,10 +131,11 @@ with tab_vendedor:
     with col1:
         vendedor = st.session_state.usuario_logueado
         st.text_input("Vendedor:", value=vendedor, disabled=True) 
-        cliente = st.text_input("Nombre del Cliente:", key="cliente")
     with col2:
         caja = st.selectbox("¿A qué Caja se envía?", ["Caja 1", "Caja 2"], key="caja")
-        tel_cliente = st.text_input("Celular del Cliente (Ej: 598...):", key="tel_cliente")
+        
+    # El vendedor solo anota el nombre del cliente
+    cliente = st.text_input("Nombre del Cliente:", key="cliente", placeholder="Ej: María Gómez")
     
     st.divider()
     st.write("### 🔍 Buscador de Productos")
@@ -183,6 +187,9 @@ with tab_vendedor:
 
     if total_vendedor > 0:
         st.write(f"### Subtotal: ${total_vendedor:,.1f}")
+        
+        st.info("💡 Si el cliente quiere más cosas después de enviar esto, simplemente haz un nuevo pedido con su mismo nombre.")
+        
         if st.button("🚀 Enviar a Caja"):
             if not cliente:
                 st.warning("Falta completar el nombre del Cliente.")
@@ -190,14 +197,16 @@ with tab_vendedor:
                 _, sheet = obtener_ventas_hoy()
                 if sheet:
                     for p, d in pedidos_vendedor.items():
-                        sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], tel_cliente])
+                        # Guardamos en Excel sin celular (se lo pedirá la caja luego)
+                        sheet.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), vendedor, cliente, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], ""])
                     
-                    st.success("✅ Pedido enviado a Caja y guardado en Excel.")
+                    st.success("✅ Pedido enviado a Caja.")
                     
-                    msg_caja = f"🛒 NUEVO PEDIDO\n👤 Vend: {vendedor} | Cliente: {cliente}\n📱 Tel: {tel_cliente}\n-------------------\n"
+                    # Mensaje interno para la caja (Sin número de cliente)
+                    msg_caja = f"🛒 NUEVO PEDIDO\n👤 Vendedor: {vendedor}\n🗣️ Cliente: {cliente}\n-------------------\n"
                     for p, d in pedidos_vendedor.items():
                         msg_caja += f" • {d['cant_txt']} x {p} = ${d['subtotal']:,.1f}\n"
-                    msg_caja += f"-------------------\n💰 TOTAL: ${total_vendedor:,.1f}\n\n*Ya puedes retomar este pedido en la Pestaña Cajero.*"
+                    msg_caja += f"-------------------\n💰 SUBTOTAL: ${total_vendedor:,.1f}"
                     
                     num_caja = "59893343092" if caja == "Caja 1" else "59899111222"
                     st.link_button(f"📲 Avisar a {caja} por WhatsApp", f"https://wa.me/{num_caja}?text={urllib.parse.quote(msg_caja)}")
@@ -205,7 +214,7 @@ with tab_vendedor:
                     st.session_state.carrito_vendedor = []
 
 # ==========================================
-# PESTAÑA 2: MODO CAJERO
+# PESTAÑA 2: MODO CAJERO (Retomar y Finalizar)
 # ==========================================
 with tab_cajero:
     st.write("### 🔎 Buscar Pedidos Pendientes de Hoy")
@@ -216,6 +225,7 @@ with tab_cajero:
     hoy_str = str(date.today())
     clientes_hoy = {}
     
+    # Busca a TODOS los clientes de hoy, sumando lo de todos los vendedores
     for row in datos:
         if len(row) >= 7 and row[0] == hoy_str:
             c_nombre = row[3]
@@ -234,12 +244,14 @@ with tab_cajero:
     
     if cliente_seleccionado != "Seleccionar Cliente...":
         datos_cliente = clientes_hoy[cliente_seleccionado]
-        tel_cajero = st.text_input("Celular del Cliente:", value=datos_cliente["celular"], key="tel_cajero")
         
-        st.info(f"**Ya pidió hoy (${datos_cliente['total']:,.1f}):**\n\n" + "\n".join([f"• {p}" for p in datos_cliente["productos"]]))
+        # El Cajero es quien pide el celular final
+        tel_cajero = st.text_input("Celular del Cliente (Para enviar el ticket):", value=datos_cliente["celular"], key="tel_cajero")
+        
+        st.info(f"**El cliente ya pidió (${datos_cliente['total']:,.1f}):**\n\n" + "\n".join([f"• {p}" for p in datos_cliente["productos"]]))
         
         st.divider()
-        st.write("### ➕ ¿Quiere agregar algo más en la caja?")
+        st.write("### ➕ ¿Agregar un producto de último momento?")
         
         col_busc_c, col_btn_c = st.columns([8, 2])
         with col_busc_c:
@@ -289,8 +301,10 @@ with tab_cajero:
         if st.button("✅ Cerrar Venta y Enviar Ticket al Cliente"):
             if sheet_caja and pedidos_extra:
                 for p, d in pedidos_extra.items():
+                    # El extra se guarda bajo el nombre del cajero logueado
                     sheet_caja.append_row([str(date.today()), datetime.now().strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_seleccionado, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], tel_cajero])
             
+            # Solo el Cajero tiene el botón que arma el mensaje amigable para el cliente final
             msg_final = f"👋 Hola {cliente_seleccionado}, gracias por comprar en la feria.\n\n"
             msg_final += f"🧾 *RESUMEN DE TU COMPRA:*\n"
             msg_final += "\n".join([f"• {p}" for p in datos_cliente["productos"]]) + "\n"
@@ -302,12 +316,12 @@ with tab_cajero:
                 num_cliente = tel_cajero.replace(" ", "").replace("+", "")
                 st.link_button("📲 Enviar Ticket FINAL al Cliente", f"https://wa.me/{num_cliente}?text={urllib.parse.quote(msg_final)}")
             else:
-                st.warning("⚠️ No hay número de celular para enviar el ticket, pero la venta se registró.")
+                st.warning("⚠️ Carga el número de celular arriba si quieres enviarle el ticket por WhatsApp.")
             
             st.session_state.carrito_cajero = []
 
 # ==========================================
-# PESTAÑA 3: PANEL ADMIN (Oculta para vendedores)
+# PESTAÑA 3: PANEL ADMIN
 # ==========================================
 if tab_admin:
     with tab_admin:
@@ -317,28 +331,20 @@ if tab_admin:
         datos_admin, _ = obtener_ventas_hoy()
         
         if datos_admin and len(datos_admin) > 1:
-            # 1. Cargamos todo a un DataFrame
             df_ventas = pd.DataFrame(datos_admin)
-            
-            # 2. Aseguramos tener al menos 8 columnas para no romper el código si el excel tiene menos
             for i in range(len(df_ventas.columns), 8):
                 df_ventas[i] = ""
                 
-            # 3. Recortamos a 8 columnas y nombramos
             df_ventas = df_ventas.iloc[:, :8]
             df_ventas.columns = ["Fecha", "Hora", "Vendedor", "Cliente", "Producto", "Cantidad", "Subtotal", "Celular"]
             
-            # 4. Eliminamos la fila de títulos si existe (normalmente la fila 0)
             if df_ventas.iloc[0]["Fecha"].lower() == "fecha":
                 df_ventas = df_ventas.iloc[1:]
             
-            # 5. Filtramos solo lo de hoy
             df_ventas_hoy = df_ventas[df_ventas["Fecha"] == str(date.today())].copy()
             
             if not df_ventas_hoy.empty:
-                # Convertimos subtotales asegurando formato numérico (evita errores con comas o textos)
                 df_ventas_hoy["Subtotal"] = pd.to_numeric(df_ventas_hoy["Subtotal"].astype(str).str.replace(',', '.'), errors="coerce").fillna(0)
-                
                 total_recaudado = df_ventas_hoy["Subtotal"].sum()
                 
                 st.metric(label="💰 Recaudación Total de Hoy", value=f"${total_recaudado:,.1f}")
@@ -349,7 +355,6 @@ if tab_admin:
                 
                 ventas_por_vend["Subtotal"] = ventas_por_vend["Subtotal"].apply(lambda x: f"${x:,.1f}")
                 st.dataframe(ventas_por_vend, hide_index=True, use_container_width=True)
-                
             else:
                 st.info("Todavía no hay ventas registradas en el día de hoy.")
         else:
