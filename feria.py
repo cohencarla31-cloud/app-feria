@@ -13,7 +13,7 @@ st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_si
 TZ_UY = timezone(timedelta(hours=-3))
 
 # 🔥 AQUÍ PONES EL LINK DE TU EXCEL MASTER
-LINK_MASTER_SHEET = "https://docs.google.com/spreadsheets/d/TU_ID_DEL_MASTER_AQUI/edit"
+LINK_MASTER_SHEET = "hhttps://docs.google.com/spreadsheets/d/1CEuvlAwExOf1FS_ZYeFYw205aoVePb8SCmmLjUJTg-w/edit?gid=0#gid=0"
 
 # ==========================================
 # 2. CONEXIÓN A GOOGLE Y LECTURA DE MASTER
