@@ -51,7 +51,7 @@ def limpiar_y_formatear_celular(celular_ingresado):
     return num
 
 # ==========================================
-# 3. CARGA DE DATOS DE LA FERIA (CON CLIENTES Y CELULARES)
+# 3. CARGA DE DATOS DE LA FERIA
 # ==========================================
 @st.cache_data(ttl=30)
 def cargar_datos_feria(link):
@@ -107,7 +107,7 @@ def cargar_datos_feria(link):
             descuentos[prod_full] = desc
             nombres_planos[prod_full] = nombre
 
-    # Clientes precargados con diccionario (Nombre -> Celular)
+    # Clientes precargados robustos (detectando columnas de nombre y celular)
     clientes_dict = {}
     try:
         ws_names = [ws.title.lower() for ws in sh.worksheets()]
@@ -117,12 +117,13 @@ def cargar_datos_feria(link):
                 target_ws = sh.worksheet(name)
                 break
         if target_ws:
-            filas_cli = target_ws.get_all_values()
-            for f in filas_cli[1:]:
-                if f and str(f[0]).strip():
-                    nombre_c = str(f[0]).strip()
-                    cel_c = str(f[1]).strip() if len(f) > 1 else ""
-                    clientes_dict[nombre_c] = cel_c
+            data_cli = target_ws.get_all_records()
+            for row in data_cli:
+                # Buscar claves flexibles
+                nombre_val = str(row.get('Nombre', row.get('Cliente', row.get('nombre', row.get('cliente', ''))))).strip()
+                cel_val = str(row.get('Celular', row.get('Telefono', row.get('celular', row.get('teléfono', ''))))).strip()
+                if nombre_val:
+                    clientes_dict[nombre_val] = cel_val
     except:
         pass
     
@@ -416,7 +417,7 @@ with tabs[idx]:
                 }
                 
                 gc = conectar_google()
-                sheet = gc.open_by_url(link_excel).worksheet("Registro de Ventas")
+                sheet = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
                 ahora = datetime.now(TZ_UY)
                 
                 sheet.append_row([
@@ -458,7 +459,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 st.error("⚠️ Completa el Nombre, el Monto y el Celular para enviar el ticket.")
             else:
                 gc = conectar_google()
-                sheet = gc.open_by_url(link_excel).worksheet("Registro de Ventas") if 'link_excel' in locals() else gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                sheet = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
                 ahora = datetime.now(TZ_UY)
                 estado_venta = "Fiado Pendiente" if forma_pago == "FIADO" else "Cobrado"
                 
@@ -519,7 +520,7 @@ if st.session_state.rol_logueado == "Admin":
                 
                 st.divider()
                 
-                # Pedidos Web (Filtro flexible y robusto)
+                # Pedidos Web
                 st.subheader("🌐 Gestión de Pedidos Online Recibidos")
                 df_web = pd.DataFrame()
                 if not df_ventas.empty:
