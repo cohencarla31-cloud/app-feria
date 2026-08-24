@@ -51,28 +51,29 @@ def limpiar_y_formatear_celular(celular_ingresado):
     return num
 
 # ==========================================
-# 3. CARGA DE DATOS DE LA FERIA (ROBUSTA)
+# 3. CARGA DE DATOS DE LA FERIA
 # ==========================================
 @st.cache_data(ttl=30)
 def cargar_datos_feria(link):
     gc = conectar_google()
     sh = gc.open_by_url(link)
     
-    # 1. Configuración (Búsqueda inteligente de claves)
+    # Configuración inteligente
+    config = {}
     try:
-        df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
-        config = {}
-        if not df_conf.empty:
+        ws_list = [ws.title.lower() for ws in sh.worksheets()]
+        if "configuracion" in ws_list:
+            df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
             for _, row in df_conf.iterrows():
                 if len(row) >= 2 and str(row[0]).strip():
                     config[str(row[0]).strip().lower()] = str(row[1]).strip()
     except:
-        config = {}
+        pass
         
-    # 2. Productos
+    # Productos
     try:
-        worksheet_prod = sh.worksheet("Productos")
-        filas_prod = worksheet_prod.get_all_values()
+        ws_prod = sh.worksheet("Productos")
+        filas_prod = ws_prod.get_all_values()
     except:
         filas_prod = []
         
@@ -106,7 +107,7 @@ def cargar_datos_feria(link):
             descuentos[prod_full] = desc
             nombres_planos[prod_full] = nombre
 
-    # 3. Clientes Frecuentes
+    # Clientes precargados
     clientes_precargados = []
     try:
         ws_cli = sh.worksheet("Clientes")
@@ -131,8 +132,6 @@ if "feria" in query_params:
         try:
             productos, precios, descuentos, nombres_planos, clientes_prec, config = cargar_datos_feria(link_excel)
             nombre_feria = config.get("nombre_empresa", config.get("nombre_feria", "Nuestra Feria"))
-            
-            # Buscar celular del feriante en varias opciones de clave posibles
             celular_feriante = config.get("celular_feriante", config.get("celular_cajero", config.get("celular_contacto", "")))
             
             st.title(f"🛒 {nombre_feria}")
@@ -203,8 +202,6 @@ if "feria" in query_params:
                                 
                             num_feriante_limpio = limpiar_y_formatear_celular(celular_feriante)
                             st.link_button("📲 Enviar Notificación al WhatsApp del Feriante", f"https://wa.me/{num_feriante_limpio}?text={urllib.parse.quote(msg_feriante)}")
-                        else:
-                            st.info("ℹ️ Pedido guardado en sistema correctamente.")
         except Exception as e:
             st.error(f"Error cargando la tienda online: {e}")
     else:
@@ -212,7 +209,7 @@ if "feria" in query_params:
     st.stop()
 
 # ==========================================
-# 5. MODO PRIVADO Y ACCESO (SUPER ADMIN INVISIBLE)
+# 5. MODO PRIVADO Y ACCESO
 # ==========================================
 if "usuario_logueado" not in st.session_state:
     st.session_state.usuario_logueado = None
@@ -285,7 +282,7 @@ with st.sidebar:
 
 PRODUCTOS, PRECIOS, DESCUENTOS, NOMBRES, CLIENTES_PREC, CONFIG = cargar_datos_feria(st.session_state.link_feria)
 nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre_feria", "La Feria"))
-celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_cajero", CONFIG.get("celular_contacto", "59899000000")))
+celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_cajero", CONFIG.get("celular_contacto", "59893343092")))
 
 st.title(f"🏢 {nombre_empresa}")
 
@@ -304,7 +301,6 @@ idx = 0
 with tabs[idx]:
     st.write("### 📝 Armar Carrito de Compra (Vendedor)")
     
-    # Reconocer clientes precargados con selector o tipeo libre
     opciones_cli = ["Escribir nuevo..."] + CLIENTES_PREC if CLIENTES_PREC else []
     tipo_cli_sel = st.selectbox("Seleccionar Cliente (Opcional):", opciones_cli) if opciones_cli else "Escribir nuevo..."
     
@@ -358,7 +354,6 @@ with tabs[idx]:
             else:
                 st.error("Completa la descripción y el precio.")
 
-    # Carrito con opción de borrar ítem por ítem
     if st.session_state.carrito_vendedor:
         st.divider()
         st.subheader("🛒 Carrito Actual")
@@ -412,7 +407,7 @@ with tabs[idx]:
                 st.link_button("📲 Enviar Aviso al Celular del Cajero", f"https://wa.me/{num_cajero}?text={urllib.parse.quote(msg_cajero)}")
     idx += 1
 
-# --- PESTAÑA 2: CAJA Y COBRO (DINÁMICA Y PERMITE RETOMAR) ---
+# --- PESTAÑA 2: CAJA Y COBRO ---
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 💳 Módulo de Caja y Cobro")
@@ -423,9 +418,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         
         if autodetalle:
             st.info(f"📥 Pedido pendiente recibido de Vendedor para **{autocli}** por **${autototal:,.1f}**")
-            if st.button("🔄 Retomar / Editar este pedido (agregar más ítems)"):
+            if st.button("🔄 Retomar / Editar este pedido"):
                 st.session_state.carrito_vendedor = st.session_state.pedido_activo_caja.get("items", [])
-                st.warning("Carrito restaurado. Ve a la pestaña 'Toma de Pedidos' para agregar o quitar mercadería.")
+                st.warning("Carrito restaurado. Ve a la pestaña 'Toma de Pedidos' para ajustar ítems.")
 
         cliente_caja = st.text_input("Nombre del Cliente (Caja):", value=autocli, key="cc_name")
         monto_cobro = st.number_input("Monto Total a Cobrar ($):", min_value=0.0, value=float(autototal), step=10.0, format="%.1f", key="cc_monto")
@@ -481,7 +476,7 @@ if st.session_state.rol_logueado == "Admin":
             if registros_ventas:
                 df_ventas = pd.DataFrame(registros_ventas)
                 
-                # Excluir ítems ajenos del balance total de ganancias
+                # Calcular recaudación propia excluyendo ítems ajenos
                 if 'Detalle' in df_ventas.columns and 'Monto' in df_ventas.columns:
                     df_propios = df_ventas[~df_ventas['Detalle'].str.contains("Ajeno", case=False, na=False)]
                     total_recaudado = pd.to_numeric(df_propios['Monto'], errors='coerce').sum()
@@ -512,7 +507,7 @@ if st.session_state.rol_logueado == "Admin":
                             c_w1, c_w2 = st.columns(2)
                             with c_w1:
                                 msg_recibido = f"Hola *{row.get('Cliente', 'Cliente')}* 🛒. ¡Recibimos tu pedido en *{nombre_empresa}*! A la brevedad será armado y despachado. ¡Gracias por elegirnos!"
-                                cel_w = limpiar_y_formatear_celular(row.get('Celular', ''))
+                                cel_w = limpiar_y_formatear_celular(str(row.get('Celular', '')))
                                 st.link_button(f"📲 Reenviar 'Pedido Recibido' (Wsp)", f"https://wa.me/{cel_w}?text={urllib.parse.quote(msg_recibido)}")
                             with c_w2:
                                 msg_camino = f"Hola *{row.get('Cliente', 'Cliente')}* 🛵. Tu pedido de *{nombre_empresa}* ya va en camino a tu domicilio. ¡Que lo disfrutes!"
