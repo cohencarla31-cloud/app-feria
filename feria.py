@@ -58,7 +58,6 @@ def cargar_datos_feria(link):
     gc = conectar_google()
     sh = gc.open_by_url(link)
     
-    # Productos
     worksheet_prod = sh.worksheet("Productos")
     filas_prod = worksheet_prod.get_all_values()
     
@@ -92,7 +91,6 @@ def cargar_datos_feria(link):
             descuentos[prod_full] = desc
             nombres_planos[prod_full] = nombre
 
-    # Configuración
     df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
     config = dict(zip(df_conf[0], df_conf[1])) if not df_conf.empty else {}
     
@@ -173,7 +171,6 @@ if "feria" in query_params:
                         
                         st.success("✅ ¡Muchas gracias por tu compra! A la brevedad será armada y despachada.")
                         
-                        # Mensaje para notificar al feriante vía WhatsApp
                         msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n\n👤 Cliente: {nombre_cliente}\n📱 Celular: {celular_formateado}\n📍 Dirección: {direccion_cliente}\n📦 Productos:\n{detalle_pedido_texto}"
                         if observaciones_cliente:
                             msg_feriante += f"\n\n💬 Notas: {observaciones_cliente}"
@@ -194,7 +191,9 @@ if "usuario_logueado" not in st.session_state:
     st.session_state.rol_logueado = None
     st.session_state.link_feria = None
     st.session_state.es_super_admin = False
-    st.session_state.carrito_vendedor = [] # Para acumular ítems antes de enviar a caja
+
+if "carrito_vendedor" not in st.session_state:
+    st.session_state.carrito_vendedor = []
 
 if st.session_state.usuario_logueado is None:
     st.title("🔒 Ingreso al Sistema")
@@ -269,12 +268,11 @@ if st.session_state.rol_logueado == "Admin":
 tabs = st.tabs(tabs_nombres)
 idx = 0
 
-# --- PESTAÑA 1: VENDEDOR (CON ACUMULADOR E ÍTEM MANUAL) ---
+# --- PESTAÑA 1: VENDEDOR ---
 with tabs[idx]:
     st.write("### 📝 Armar Carrito de Compra (Vendedor)")
     cliente_vendedor = st.text_input("Nombre del Cliente:", key="cli_v")
     
-    # Elección entre producto del catálogo o ítem manual libre
     tipo_ingreso = st.radio("Tipo de ítem:", ["Catálogo de Productos", "Ítem Manual / Libre"], horizontal=True)
     
     if tipo_ingreso == "Catálogo de Productos":
@@ -313,9 +311,8 @@ with tabs[idx]:
             else:
                 st.error("Completa la descripción y el precio.")
 
-    # Mostrar Carrito Actual Acumulado
     if st.session_state.carrito_vendedor:
-        st.divider("---")
+        st.divider()
         st.subheader("🛒 Carrito Actual del Cliente")
         df_carrito = pd.DataFrame(st.session_state.carrito_vendedor)
         st.dataframe(df_carrito, use_container_width=True)
@@ -330,7 +327,7 @@ with tabs[idx]:
                     st.error("⚠️ Ingresa el nombre del cliente.")
                 else:
                     gc = conectar_google()
-                    sheet = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                    sheet = gc.open_by_url(link_excel).worksheet("Registro de Ventas") if 'link_excel' in locals() else gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
                     ahora = datetime.now(TZ_UY)
                     
                     detalle_resumen = " | ".join([f"{row['producto']}: {row['cantidad']}un" for row in st.session_state.carrito_vendedor])
@@ -348,7 +345,7 @@ with tabs[idx]:
                 st.rerun()
     idx += 1
 
-# --- PESTAÑA 2: CAJA Y COBRO (CON WHATSAPP PERSONALIZADO Y AHORRO) ---
+# --- PESTAÑA 2: CAJA Y COBRO ---
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 💳 Cobrar y Enviar Ticket por WhatsApp")
@@ -375,7 +372,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     "Venta en Caja", 1, monto_cobro, celular_formateado, "", forma_pago, estado_venta
                 ])
                 
-                # Ticket personalizado con nombre, agradecimiento y ahorro si lo hay
                 if forma_pago == "FIADO":
                     msg = f"👋 Hola *{cliente_caja}*, registramos tu compra en *{nombre_empresa}* por un total de *${monto_cobro:,.1f}* bajo la modalidad *FIADO*."
                 else:
@@ -390,7 +386,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 st.link_button("📲 Enviar Ticket por WhatsApp al Cliente", f"https://wa.me/{celular_formateado}?text={urllib.parse.quote(msg)}")
         idx += 1
 
-# --- PESTAÑA 3: PANEL ADMIN, WEB & RECORDATORIO DE FIADOS (+10 DÍAS) ---
+# --- PESTAÑA 3: PANEL ADMIN, WEB & FIADOS ---
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
         st.write("### 📊 Panel de Control, Pedidos Web y Fiados")
@@ -404,7 +400,6 @@ if st.session_state.rol_logueado == "Admin":
             if registros_ventas:
                 df_ventas = pd.DataFrame(registros_ventas)
                 
-                # Métricas
                 col_m1, col_m2 = st.columns(2)
                 with col_m1:
                     st.metric(label="Total Registros", value=len(df_ventas))
@@ -415,7 +410,6 @@ if st.session_state.rol_logueado == "Admin":
                 
                 st.divider()
                 
-                # SECCIÓN A: GESTIÓN DE PEDIDOS WEB PENDIENTES
                 st.subheader("🌐 Gestión de Pedidos Online Recibidos")
                 if 'Estado' in df_ventas.columns:
                     df_web = df_ventas[df_ventas['Estado'].str.contains("Web", case=False, na=False)]
@@ -439,14 +433,12 @@ if st.session_state.rol_logueado == "Admin":
                 
                 st.divider()
                 
-                # SECCIÓN B: GESTIÓN DE FIADOS Y RECORDATORIOS (>10 DÍAS)
                 st.subheader("💳 Control de Fiados y Recordatorios de Deuda")
                 if 'Estado' in df_ventas.columns and 'Forma_Pago' in df_ventas.columns:
                     df_fiados = df_ventas[df_ventas['Forma_Pago'].str.contains("FIADO", case=False, na=False)]
                     if not df_fiados.empty:
                         st.markdown("Clientes con saldos pendientes o fiados registrados:")
                         for i, row in df_fiados.iterrows():
-                            # Calcular antigüedad aproximada basada en la fecha del registro
                             try:
                                 fecha_venta = datetime.strptime(row.get('Fecha', ''), "%d/%m/%Y").date()
                                 dias_transcurridos = (datetime.now(TZ_UY).date() - fecha_venta).days
