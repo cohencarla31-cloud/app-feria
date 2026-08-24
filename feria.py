@@ -39,48 +39,130 @@ def obtener_datos_cliente(codigo_empresa):
     return None
 
 # ==========================================
-# 3. FUNCIÓN DE CARGA CON DEPURACIÓN VISUAL
+# 3. CARGA DE PRODUCTOS A PRUEBA DE FALLOS
 # ==========================================
 @st.cache_data(ttl=30)
 def cargar_datos_feria(link):
     gc = conectar_google()
     sh = gc.open_by_url(link)
     
-    # Cargar Productos
+    # Leer todas las filas de Productos ignorando errores de cabecera usando get_all_values()
     worksheet_prod = sh.worksheet("Productos")
-    data_prod = worksheet_prod.get_all_records()
-    df_prod = pd.DataFrame(data_prod).fillna("")
+    filas_prod = worksheet_prod.get_all_values()
     
-    # 🔍 MOSTRAR EN PANTALLA LO QUE LEE EL ROBOT
-    st.write("---")
-    st.write("🔍 **Depuración - Lo que leyó gspread de tu hoja Productos:**")
-    st.dataframe(df_prod)
-    st.write("---")
+    productos = []
+    precios = {}
+    descuentos = {}
+    nombres_planos = {}
     
-    # Normalizar nombres de columnas
-    df_prod.columns = [str(col).strip() for col in df_prod.columns]
-    
-    col_precio = next((c for c in df_prod.columns if 'precio' in c.lower()), 'Precio')
-    col_emoji = next((c for c in df_prod.columns if 'emoji' in c.lower()), 'Emoji')
-    col_producto = next((c for c in df_prod.columns if 'producto' in c.lower() or 'articulo' in c.lower()), 'Producto')
-    col_desc = next((c for c in df_prod.columns if 'descuento' in c.lower() or 'desc' in c.lower()), 'Descuento')
-    
-    df_prod['Precio'] = pd.to_numeric(df_prod[col_precio], errors='coerce').fillna(0)
-    df_prod['Descuento'] = pd.to_numeric(df_prod[col_desc], errors='coerce').fillna(0) 
-    
-    df_prod['Prod_Full'] = df_prod[col_emoji].astype(str) + " " + df_prod[col_producto].astype(str)
-    productos = df_prod['Prod_Full'].tolist()
-    precios = dict(zip(df_prod['Prod_Full'], df_prod['Precio']))
-    descuentos = dict(zip(df_prod['Prod_Full'], df_prod['Descuento']))
-    nombres_planos = dict(zip(df_prod['Prod_Full'], df_prod[col_producto]))
-    
+    # Empezamos desde la fila 1 (saltando la cabecera 0)
+    for fila in filas_prod[1:]:
+        if len(fila) >= 3 and fila[1].strip() != "":  
+            emoji = fila[0].strip()
+            nombre = fila[1].strip()
+            
+            # Limpiar precio (remover símbolos de moneda y comas si las hubiera)
+            precio_str = str(fila[2]).replace("$", "").replace(",", "").strip()
+            try:
+                precio = float(precio_str) if precio_str else 0.0
+            except:
+                precio = 0.0
+                
+            # Limpiar descuento (columna 5 o 6 según orden, por defecto 0)
+            desc = 0.0
+            if len(fila) >= 6 and str(fila[5]).strip() != "":
+                desc_str = str(fila[5]).replace("%", "").strip()
+                try:
+                    desc = float(desc_str)
+                except:
+                    desc = 0.0
+            
+            prod_full = f"{emoji} {nombre}"
+            productos.append(prod_full)
+            precios[prod_full] = precio
+            descuentos[prod_full] = desc
+            nombres_planos[prod_full] = nombre
+
+    # Cargar Configuración
     df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
     config = dict(zip(df_conf[0], df_conf[1])) if not df_conf.empty else {}
     
     return productos, precios, descuentos, nombres_planos, config
 
 # ==========================================
-# 4. MODO PRIVADO Y LOGIN
+# 4. MODO TIENDA (CATÁLOGO DIGITAL PÚBLICO)
+# ==========================================
+query_params = st.query_params
+if "feria" in query_params:
+    codigo_feria = query_params["feria"]
+    link_excel = obtener_datos_cliente(codigo_feria)
+    
+    if link_excel and link_excel != "SUSPENDIDO":
+        try:
+            productos, precios, descuentos, nombres_planos, config = cargar_datos_feria(link_excel)
+            nombre_feria = config.get("Nombre_Empresa", "Nuestra Feria")
+            
+            st.title(f"🛒 {nombre_feria}")
+            st.markdown("Elige tus productos, completa tus datos de envío y haz tu pedido al instante.")
+            st.divider()
+            
+            st.subheader("1️⃣ Tus Datos de Envío")
+            nombre_cliente = st.text_input("Nombre y Apellido:")
+            celular_cliente = st.text_input("Celular (Ej: 099123456):")
+            direccion_cliente = st.text_input("Dirección de Envío (Calle, Nro y Esquina):")
+            
+            st.divider()
+            st.subheader("2️⃣ Armá tu Pedido")
+            
+            cantidades_seleccionadas = {}
+            for prod_full in productos:
+                precio = precios.get(prod_full, 0)
+                descuento = descuentos.get(prod_full, 0)
+                
+                if descuento > 0:
+                    precio_final = precio * (1 - (descuento / 100))
+                    label_precio = f"${precio_final:,.1f} (¡{descuento}% OFF!)"
+                else:
+                    label_precio = f"${precio:,.1f}"
+                
+                col_info, col_input = st.columns([2, 1])
+                with col_info:
+                    st.markdown(f"**{prod_full}**  \n*Precio:* {label_precio}")
+                with col_input:
+                    cantidades_seleccionadas[prod_full] = st.number_input(
+                        f"Cant ({prod_full})", 
+                        min_value=0.0, max_value=50.0, step=0.5, format="%.1f",
+                        key=f"prod_{prod_full}", label_visibility="collapsed"
+                    )
+                st.markdown("---")
+            
+            if st.button("🚀 Enviar Pedido a la Feria", type="primary", use_container_width=True):
+                if not nombre_cliente or not celular_cliente or not direccion_cliente:
+                    st.error("⚠️ Por favor completa tu Nombre, Celular y Dirección de Envío.")
+                else:
+                    pedido_items = [f"{prod}: {cant}kg/un" for prod, cant in cantidades_seleccionadas.items() if cant > 0]
+                    if not pedido_items:
+                        st.warning("⚠️ No has seleccionado ningún producto.")
+                    else:
+                        detalle_pedido_texto = " | ".join(pedido_items)
+                        gc = conectar_google()
+                        sheet_ventas = gc.open_by_url(link_excel).worksheet("Registro de Ventas")
+                        
+                        ahora = datetime.now(TZ_UY)
+                        sheet_ventas.append_row([
+                            ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
+                            "Web", nombre_cliente, detalle_pedido_texto, 1, 0, 
+                            celular_cliente, direccion_cliente, "A definir", "Web - Pendiente"
+                        ])
+                        st.success("✅ ¡Pedido enviado con éxito! El feriante lo está preparando.")
+        except Exception as e:
+            st.error(f"Error cargando la tienda online: {e}")
+    else:
+        st.error("Feria no encontrada o inactiva.")
+    st.stop()
+
+# ==========================================
+# 5. MODO PRIVADO Y ACCESO LIMPIO (SUPER ADMIN INVISIBLE)
 # ==========================================
 if "usuario_logueado" not in st.session_state:
     st.session_state.usuario_logueado = None
@@ -89,58 +171,48 @@ if "usuario_logueado" not in st.session_state:
     st.session_state.es_super_admin = False
 
 if st.session_state.usuario_logueado is None:
-    st.title("🔒 Acceso al Sistema")
+    st.title("🔒 Ingreso al Sistema")
+    st.markdown("Introduce los datos proporcionados para administrar tu comercio.")
     
-    tab_login_normal, tab_login_super = st.tabs(["Empleados / Feriantes", "👑 Super Admin (Tú)"])
+    empresa_intento = st.text_input("Código de Empresa:", key="emp_norm").strip().upper()
+    usuario_intento = st.text_input("Usuario:", key="usu_norm").strip()
+    clave_intento = st.text_input("Contraseña:", type="password", key="cla_norm")
     
-    with tab_login_normal:
-        empresa_intento = st.text_input("Código de Empresa (Ej: ILNONNO):", key="emp_norm").upper()
-        usuario_intento = st.text_input("Usuario:", key="usu_norm")
-        clave_intento = st.text_input("Contraseña:", type="password", key="cla_norm")
-        
-        if st.button("🚪 Ingresar como Empleado"):
-            link_excel = obtener_datos_cliente(empresa_intento)
-            if link_excel == "SUSPENDIDO":
-                st.error("❌ Cuenta suspendida.")
-            elif link_excel:
-                try:
-                    gc = conectar_google()
-                    sh = gc.open_by_url(link_excel)
-                    df_usuarios = pd.DataFrame(sh.worksheet("Usuarios").get_all_records()).astype(str)
-                    
-                    usuario_valido = df_usuarios[(df_usuarios['Usuario'].str.lower() == usuario_intento.lower()) & (df_usuarios['Clave'] == clave_intento)]
-                    
-                    if not usuario_valido.empty:
-                        st.session_state.usuario_logueado = usuario_intento
-                        st.session_state.rol_logueado = usuario_valido.iloc[0]['Rol']
-                        st.session_state.link_feria = link_excel
-                        st.session_state.es_super_admin = False
-                        st.rerun()
-                    else:
-                        st.error("❌ Usuario o Contraseña incorrectos.")
-                except Exception as e:
-                    st.error(f"❌ Error de permisos o lectura de usuarios: {e}")
-            else:
-                st.error("❌ Código de empresa inválido o inactivo en el Master.")
-
-    with tab_login_super:
-        st.markdown("Acceso maestro exclusivo para la dueña de la plataforma SaaS.")
-        clave_maestra = st.text_input("Clave Maestra Global:", type="password", key="cla_super")
-        codigo_a_revisar = st.text_input("Código de Empresa a Auditar (Ej: ILNONNO):", key="emp_super").upper()
-        
-        if st.button("🚀 Ingresar como Super Admin"):
-            if clave_maestra == "MiClaveSuperSecreta2026": 
-                link_excel = obtener_datos_cliente(codigo_a_revisar)
-                if link_excel and link_excel != "SUSPENDIDO":
-                    st.session_state.usuario_logueado = "SuperAdmin"
-                    st.session_state.rol_logueado = "Admin"
+    if st.button("🚪 Ingresar", type="primary"):
+        # 👑 TRUCO SUPER ADMIN INVISIBLE: Si pones código "MASTER" y tu clave secreta
+        if empresa_intento == "MASTER" and clave_intento == "MiClaveSuperSecreta2026":
+            # Te deja elegir a qué feria entrar escribiendo su código real de forma interna
+            st.session_state.usuario_logueado = "SuperAdmin"
+            st.session_state.rol_logueado = "Admin"
+            # Por defecto te asigna el primer link o pedimos el código de feria en otro lado
+            st.session_state.link_feria = obtener_datos_cliente("ILNONNO") # O la feria que gustes auditar
+            st.session_state.es_super_admin = True
+            st.rerun()
+            
+        # Ingreso normal de empleados / administradores de la feria
+        link_excel = obtener_datos_cliente(empresa_intento)
+        if link_excel == "SUSPENDIDO":
+            st.error("❌ Cuenta suspendida.")
+        elif link_excel:
+            try:
+                gc = conectar_google()
+                sh = gc.open_by_url(link_excel)
+                df_usuarios = pd.DataFrame(sh.worksheet("Usuarios").get_all_records()).astype(str)
+                
+                usuario_valido = df_usuarios[(df_usuarios['Usuario'].str.lower() == usuario_intento.lower()) & (df_usuarios['Clave'] == clave_intento)]
+                
+                if not usuario_valido.empty:
+                    st.session_state.usuario_logueado = usuario_intento
+                    st.session_state.rol_logueado = usuario_valido.iloc[0]['Rol']
                     st.session_state.link_feria = link_excel
-                    st.session_state.es_super_admin = True
+                    st.session_state.es_super_admin = False
                     st.rerun()
                 else:
-                    st.error("❌ El código de empresa no existe o está suspendido en el Master.")
-            else:
-                st.error("❌ Clave maestra incorrecta.")
+                    st.error("❌ Usuario o Contraseña incorrectos.")
+            except Exception as e:
+                st.error(f"❌ Error de permisos o lectura de usuarios: {e}")
+        else:
+            st.error("❌ Código de empresa inválido o inactivo en el Master.")
     st.stop()
 
 # --- PANEL PRIVADO ---
@@ -148,7 +220,7 @@ with st.sidebar:
     color_rol = "👑" if st.session_state.rol_logueado == "Admin" else "🛒"
     st.success(f"{color_rol} Hola, **{st.session_state.usuario_logueado}**\n\nRol: {st.session_state.rol_logueado}")
     if st.session_state.es_super_admin:
-        st.warning("⚠️ Modo Super Admin Activo")
+        st.warning("⚠️ Modo Super Admin Invisible")
     
     if st.button("Cerrar Sesión"):
         st.session_state.usuario_logueado = None
