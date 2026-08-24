@@ -201,39 +201,7 @@ with st.sidebar:
         st.session_state.es_super_admin = False
         st.rerun()
 
-@st.cache_data(ttl=30)
-def cargar_datos_feria(link):
-    gc = conectar_google()
-    sh = gc.open_by_url(link)
-    
-    # Cargar Productos de forma inteligente limpiando espacios en los títulos
-    worksheet_prod = sh.worksheet("Productos")
-    data_prod = worksheet_prod.get_all_records()
-    df_prod = pd.DataFrame(data_prod).fillna("")
-    
-    # Normalizar nombres de columnas (eliminar espacios y pasar a minúsculas para buscar bien)
-    df_prod.columns = [str(col).strip() for col in df_prod.columns]
-    
-    # Buscar dinámicamente las columnas clave sin importar variaciones
-    col_precio = next((c for c in df_prod.columns if 'precio' in c.lower()), 'Precio')
-    col_emoji = next((c for c in df_prod.columns if 'emoji' in c.lower()), 'Emoji')
-    col_producto = next((c for c in df_prod.columns if 'producto' in c.lower() or 'articulo' in c.lower()), 'Producto')
-    col_desc = next((c for c in df_prod.columns if 'descuento' in c.lower() or 'desc' in c.lower()), 'Descuento')
-    
-    df_prod['Precio'] = pd.to_numeric(df_prod[col_precio], errors='coerce').fillna(0)
-    df_prod['Descuento'] = pd.to_numeric(df_prod[col_desc], errors='coerce').fillna(0) 
-    
-    df_prod['Prod_Full'] = df_prod[col_emoji].astype(str) + " " + df_prod[col_producto].astype(str)
-    productos = df_prod['Prod_Full'].tolist()
-    precios = dict(zip(df_prod['Prod_Full'], df_prod['Precio']))
-    descuentos = dict(zip(df_prod['Prod_Full'], df_prod['Descuento']))
-    nombres_planos = dict(zip(df_prod['Prod_Full'], df_prod[col_producto]))
-    
-    # Cargar Configuración
-    df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
-    config = dict(zip(df_conf[0], df_conf[1])) if not df_conf.empty else {}
-    
-    return productos, precios, descuentos, nombres_planos, config
+
 
 PRODUCTOS, PRECIOS, DESCUENTOS, NOMBRES, CONFIG = cargar_datos_feria(st.session_state.link_feria)
 nombre_empresa = CONFIG.get("Nombre_Empresa", "La Feria")
