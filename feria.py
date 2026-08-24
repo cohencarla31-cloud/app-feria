@@ -12,7 +12,6 @@ import json
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 TZ_UY = timezone(timedelta(hours=-3))
 
-# 🔥 AQUÍ PONES EL LINK DE TU EXCEL MASTER
 LINK_MASTER_SHEET = "https://docs.google.com/spreadsheets/d/1CEuvlAwExOf1FS_ZYeFYw205aoVePb8SCmmLjUJTg-w/edit?gid=0#gid=0"
 
 # ==========================================
@@ -40,91 +39,48 @@ def obtener_datos_cliente(codigo_empresa):
     return None
 
 # ==========================================
-# 3. MODO TIENDA (CATÁLOGO DIGITAL PARA EL CLIENTE FINAL)
+# 3. FUNCIÓN DE CARGA CON DEPURACIÓN VISUAL
 # ==========================================
-query_params = st.query_params
-if "feria" in query_params:
-    codigo_feria = query_params["feria"]
-    link_excel = obtener_datos_cliente(codigo_feria)
+@st.cache_data(ttl=30)
+def cargar_datos_feria(link):
+    gc = conectar_google()
+    sh = gc.open_by_url(link)
     
-    if link_excel and link_excel != "SUSPENDIDO":
-        try:
-            gc = conectar_google()
-            sh = gc.open_by_url(link_excel)
-            
-            # Cargar configuración con gspread
-            df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
-            config = dict(zip(df_conf[0], df_conf[1])) if not df_conf.empty else {}
-            nombre_feria = config.get("Nombre_Empresa", "Nuestra Feria")
-            
-            # Cargar productos con gspread
-            df_prod = pd.DataFrame(sh.worksheet("Productos").get_all_records()).fillna("")
-            df_prod['Precio'] = pd.to_numeric(df_prod['Precio'], errors='coerce').fillna(0)
-            df_prod['Descuento'] = pd.to_numeric(df_prod['Descuento'], errors='coerce').fillna(0)
-            
-            st.title(f"🛒 {nombre_feria}")
-            st.markdown("Elige tus productos, completa tus datos de envío y haz tu pedido al instante.")
-            st.divider()
-            
-            st.subheader("1️⃣ Tus Datos de Envío")
-            nombre_cliente = st.text_input("Nombre y Apellido:")
-            celular_cliente = st.text_input("Celular (Ej: 099123456):")
-            direccion_cliente = st.text_input("Dirección de Envío (Calle, Nro y Esquina):")
-            
-            st.divider()
-            st.subheader("2️⃣ Armá tu Pedido")
-            
-            cantidades_seleccionadas = {}
-            for index, row in df_prod.iterrows():
-                emoji = row['Emoji']
-                producto = row['Producto']
-                precio = row['Precio']
-                descuento = row['Descuento']
-                
-                if producto:
-                    if descuento > 0:
-                        precio_final = precio * (1 - (descuento / 100))
-                        label_precio = f"${precio_final:,.1f} (¡{descuento}% OFF!)"
-                    else:
-                        label_precio = f"${precio:,.1f}"
-                    
-                    col_info, col_input = st.columns([2, 1])
-                    with col_info:
-                        st.markdown(f"**{emoji} {producto}**  \n*Precio:* {label_precio}")
-                    with col_input:
-                        cantidades_seleccionadas[producto] = st.number_input(
-                            f"Cant ({producto})", 
-                            min_value=0.0, max_value=50.0, step=0.5, format="%.1f",
-                            key=f"prod_{index}", label_visibility="collapsed"
-                        )
-                    st.markdown("---")
-            
-            if st.button("🚀 Enviar Pedido a la Feria", type="primary", use_container_width=True):
-                if not nombre_cliente or not celular_cliente or not direccion_cliente:
-                    st.error("⚠️ Por favor completa tu Nombre, Celular y Dirección de Envío.")
-                else:
-                    pedido_items = [f"{prod}: {cant}kg/un" for prod, cant in cantidades_seleccionadas.items() if cant > 0]
-                    if not pedido_items:
-                        st.warning("⚠️ No has seleccionado ningún producto.")
-                    else:
-                        detalle_pedido_texto = " | ".join(pedido_items)
-                        sheet_ventas = sh.worksheet("Registro de Ventas")
-                        
-                        ahora = datetime.now(TZ_UY)
-                        sheet_ventas.append_row([
-                            ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
-                            "Web", nombre_cliente, detalle_pedido_texto, 1, 0, 
-                            celular_cliente, direccion_cliente, "A definir", "Web - Pendiente"
-                        ])
-                        st.success("✅ ¡Pedido enviado con éxito! El feriante lo está preparando.")
-        except Exception as e:
-            st.error(f"Error cargando la tienda online (Verifica permisos del Excel): {e}")
-    else:
-        st.error("Feria no encontrada o inactiva.")
-    st.stop()
+    # Cargar Productos
+    worksheet_prod = sh.worksheet("Productos")
+    data_prod = worksheet_prod.get_all_records()
+    df_prod = pd.DataFrame(data_prod).fillna("")
+    
+    # 🔍 MOSTRAR EN PANTALLA LO QUE LEE EL ROBOT
+    st.write("---")
+    st.write("🔍 **Depuración - Lo que leyó gspread de tu hoja Productos:**")
+    st.dataframe(df_prod)
+    st.write("---")
+    
+    # Normalizar nombres de columnas
+    df_prod.columns = [str(col).strip() for col in df_prod.columns]
+    
+    col_precio = next((c for c in df_prod.columns if 'precio' in c.lower()), 'Precio')
+    col_emoji = next((c for c in df_prod.columns if 'emoji' in c.lower()), 'Emoji')
+    col_producto = next((c for c in df_prod.columns if 'producto' in c.lower() or 'articulo' in c.lower()), 'Producto')
+    col_desc = next((c for c in df_prod.columns if 'descuento' in c.lower() or 'desc' in c.lower()), 'Descuento')
+    
+    df_prod['Precio'] = pd.to_numeric(df_prod[col_precio], errors='coerce').fillna(0)
+    df_prod['Descuento'] = pd.to_numeric(df_prod[col_desc], errors='coerce').fillna(0) 
+    
+    df_prod['Prod_Full'] = df_prod[col_emoji].astype(str) + " " + df_prod[col_producto].astype(str)
+    productos = df_prod['Prod_Full'].tolist()
+    precios = dict(zip(df_prod['Prod_Full'], df_prod['Precio']))
+    descuentos = dict(zip(df_prod['Prod_Full'], df_prod['Descuento']))
+    nombres_planos = dict(zip(df_prod['Prod_Full'], df_prod[col_producto]))
+    
+    df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
+    config = dict(zip(df_conf[0], df_conf[1])) if not df_conf.empty else {}
+    
+    return productos, precios, descuentos, nombres_planos, config
 
 # ==========================================
-# 4. MODO PRIVADO Y SUPER ADMIN GLOBAL
+# 4. MODO PRIVADO Y LOGIN
 # ==========================================
 if "usuario_logueado" not in st.session_state:
     st.session_state.usuario_logueado = None
@@ -200,8 +156,6 @@ with st.sidebar:
         st.session_state.link_feria = None
         st.session_state.es_super_admin = False
         st.rerun()
-
-
 
 PRODUCTOS, PRECIOS, DESCUENTOS, NOMBRES, CONFIG = cargar_datos_feria(st.session_state.link_feria)
 nombre_empresa = CONFIG.get("Nombre_Empresa", "La Feria")
