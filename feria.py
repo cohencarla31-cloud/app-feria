@@ -14,7 +14,7 @@ TZ_UY = timezone(timedelta(hours=-3))
 
 LINK_MASTER_SHEET = "https://docs.google.com/spreadsheets/d/1CEuvlAwExOf1FS_ZYeFYw205aoVePb8SCmmLjUJTg-w/edit?gid=0#gid=0"
 
-# Inicializar variables de estado para resetear inputs numéricos
+# Inicializar variables de estado
 if 'kv' not in st.session_state: st.session_state.kv = 0.0
 if 'gv' not in st.session_state: st.session_state.gv = 0.0
 if 'uv' not in st.session_state: st.session_state.uv = 0
@@ -174,14 +174,12 @@ if "feria" in query_params:
                         celular_formateado = limpiar_y_formatear_celular(celular_cliente)
                         ahora = datetime.now(TZ_UY)
                         
-                        # Guardar Venta
                         sh.worksheet("Registro de Ventas").append_row([
                             ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
                             "Web Online", nombre_cliente.strip(), detalle_pedido_texto, 1, 0, 
                             celular_formateado, direccion_cliente, "A definir", "Web - Pendiente"
                         ])
                         
-                        # Auto-guardar Cliente si no existe en BD
                         try:
                             ws_cli = sh.worksheet("Clientes")
                             nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
@@ -227,19 +225,49 @@ if st.session_state.usuario_logueado is None:
             st.rerun()
             
         link_excel = obtener_datos_cliente(empresa_intento)
-        if link_excel == "SUSPENDIDO": st.error("❌ Cuenta suspendida.")
+        if link_excel == "SUSPENDIDO": 
+            st.error("❌ Cuenta suspendida.")
         elif link_excel:
             try:
                 gc = conectar_google()
-                df_usuarios = pd.DataFrame(gc.open_by_url(link_excel).worksheet("Usuarios").get_all_records()).astype(str)
-                valido = df_usuarios[(df_usuarios['Usuario'].str.lower() == usuario_intento.lower()) & (df_usuarios['Clave'] == clave_intento)]
-                if not valido.empty:
-                    st.session_state.usuario_logueado, st.session_state.rol_logueado = usuario_intento, valido.iloc[0]['Rol']
-                    st.session_state.link_feria, st.session_state.es_super_admin = link_excel, False
-                    st.rerun()
-                else: st.error("❌ Usuario o Contraseña incorrectos.")
-            except: st.error("❌ Error conectando a los usuarios.")
-        else: st.error("❌ Código de empresa inválido.")
+                sh = gc.open_by_url(link_excel)
+                
+                # Búsqueda flexible de la pestaña Usuarios
+                ws_nombres = [ws.title for ws in sh.worksheets()]
+                ws_usuarios_nombre = next((n for n in ws_nombres if "usuario" in n.lower()), None)
+                
+                if not ws_usuarios_nombre:
+                    st.error("❌ Error: No existe una pestaña llamada 'Usuarios' en el Excel de esta feria.")
+                else:
+                    filas_usu = sh.worksheet(ws_usuarios_nombre).get_all_values()
+                    if len(filas_usu) > 1:
+                        # Rellenar nombres de cabeceras vacías para que Pandas no falle
+                        cabeceras = [str(c).strip() if str(c).strip() else f"Col_{i}" for i, c in enumerate(filas_usu[0])]
+                        df_usuarios = pd.DataFrame(filas_usu[1:], columns=cabeceras).astype(str)
+                        
+                        col_usu = next((c for c in df_usuarios.columns if 'usuario' in c.lower()), None)
+                        col_cla = next((c for c in df_usuarios.columns if 'clave' in c.lower() or 'contraseña' in c.lower()), None)
+                        col_rol = next((c for c in df_usuarios.columns if 'rol' in c.lower()), None)
+                        
+                        if col_usu and col_cla:
+                            valido = df_usuarios[(df_usuarios[col_usu].str.lower() == usuario_intento.lower()) & (df_usuarios[col_cla] == clave_intento)]
+                            
+                            if not valido.empty:
+                                st.session_state.usuario_logueado = usuario_intento
+                                st.session_state.rol_logueado = valido.iloc[0].get(col_rol, 'Vendedor') if col_rol else 'Vendedor'
+                                st.session_state.link_feria = link_excel
+                                st.session_state.es_super_admin = False
+                                st.rerun()
+                            else:
+                                st.error("❌ Usuario o Contraseña incorrectos.")
+                        else:
+                            st.error("❌ Error: La pestaña 'Usuarios' debe tener columnas llamadas 'Usuario' y 'Clave'.")
+                    else:
+                        st.error("❌ La pestaña 'Usuarios' está vacía.")
+            except Exception as e: 
+                st.error(f"❌ Detalles del error técnico (Verifica permisos del bot): {e}")
+        else: 
+            st.error("❌ Código de empresa inválido.")
     st.stop()
 
 # --- PANEL PRIVADO ---
@@ -312,7 +340,6 @@ with tabs[idx]:
                             "id": datetime.now().timestamp(), "producto": NOMBRES.get(prod_buscado),
                             "cantidad": formato_txt, "subtotal": subtotal, "tipo": "Propio"
                         })
-                        # Reseteo de inputs para el siguiente ítem
                         st.session_state.kv = 0.0
                         st.session_state.gv = 0.0
                         st.session_state.uv = 0
@@ -361,7 +388,6 @@ with tabs[idx]:
                         st.session_state.usuario_logueado, cliente_vendedor, det, 1, total_carrito, celular_limpio, "", "En Caja"
                     ])
                     
-                    # Auto-guardar Cliente Inteligente (Vendedor)
                     try:
                         ws_cli = sh_feria.worksheet("Clientes")
                         nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
@@ -375,7 +401,6 @@ with tabs[idx]:
                     st.session_state.carrito_vendedor = []
     
     else:
-        # MODO ARMAR PEDIDO WEB
         st.write("### 📦 Armar Pedido Web (Ajuste de Pesos en Balanza)")
         try:
             gc = conectar_google()
@@ -408,9 +433,9 @@ with tabs[idx]:
                     items_raw = pedido_sel['detalle'].split(" | ")
                     observaciones = ""
                     total_real_calculado = 0.0
-                    
-                    st.markdown("#### Ingresa el peso real de la balanza:")
                     nuevos_items = []
+                    
+                    st.markdown("#### Ingresa el peso/cant real de la balanza:")
                     
                     for idx_item, item in enumerate(items_raw):
                         if item.startswith("📝 Obs:"):
@@ -426,8 +451,7 @@ with tabs[idx]:
                             cant_val = float(''.join(c for c in cant_str if c.isdigit() or c=='.'))
                             
                             col_a, col_b = st.columns([1, 1])
-                            with col_a:
-                                st.write(f"🛍️ **{prod_name}** (Pidió: {cant_str})")
+                            with col_a: st.write(f"🛍️ **{prod_name}** (Pidió: {cant_str})")
                             with col_b:
                                 if is_kg:
                                     peso_real = st.number_input("Peso real (kg):", value=float(cant_val), step=0.1, key=f"adj_{idx_item}")
@@ -438,9 +462,7 @@ with tabs[idx]:
                                     txt_cant = f"{int(peso_real)}un"
                                     cant_final = float(peso_real)
                             
-                            # Buscar el precio en el diccionario original
-                            precio_unitario = 0.0
-                            descuento_aplicado = 0.0
+                            precio_unitario, descuento_aplicado = 0.0, 0.0
                             for p_full in PRECIOS.keys():
                                 if prod_name in p_full:
                                     precio_unitario = PRECIOS[p_full]
@@ -451,35 +473,22 @@ with tabs[idx]:
                             sub_real = cant_final * precio_final
                             total_real_calculado += sub_real
                             
-                            nuevos_items.append({
-                                "producto": prod_name,
-                                "cantidad": txt_cant,
-                                "subtotal": sub_real,
-                                "tipo": "Propio"
-                            })
+                            nuevos_items.append({"producto": prod_name, "cantidad": txt_cant, "subtotal": sub_real, "tipo": "Propio"})
                     
-                    if observaciones:
-                        st.info(f"📝 **Nota del cliente:** {observaciones}")
-                        
+                    if observaciones: st.info(f"📝 **Nota del cliente:** {observaciones}")
                     st.markdown(f"### Total Exacto: **${total_real_calculado:,.1f}**")
                     
                     if st.button("⚖️ Confirmar Pesos y Enviar a Caja", type="primary"):
                         det_real = " | ".join([f"{r['producto']}: {r['cantidad']}" for r in nuevos_items])
                         if observaciones: det_real += f" | 📝 Obs: {observaciones}"
                         
-                        # Actualizar estado a "Web - En Caja" para que no vuelva a salir
                         ventas_ws.update_cell(pedido_sel["fila_idx"], 11, "Web - En Caja")
-                        
                         st.session_state.pedido_activo_caja = {
-                            "cliente": pedido_sel['cliente'],
-                            "celular": pedido_sel['celular'],
-                            "total": total_real_calculado,
-                            "detalle": f"(Web Ajustado) {det_real}",
-                            "items": nuevos_items
+                            "cliente": pedido_sel['cliente'], "celular": pedido_sel['celular'],
+                            "total": total_real_calculado, "detalle": f"(Web Ajustado) {det_real}", "items": nuevos_items
                         }
                         st.success("✅ ¡Pesos confirmados y enviado a Caja!")
                         st.rerun()
-                        
         except Exception as e:
             st.error(f"Error cargando pedidos web pendientes: {e}")
     idx += 1
