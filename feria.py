@@ -49,11 +49,16 @@ if "feria" in query_params:
     
     if link_excel and link_excel != "SUSPENDIDO":
         try:
-            df_conf = pd.read_excel(link_excel, sheet_name="Configuracion", header=None, dtype=str)
-            config = dict(zip(df_conf[0], df_conf[1]))
+            gc = conectar_google()
+            sh = gc.open_by_url(link_excel)
+            
+            # Cargar configuración con gspread
+            df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
+            config = dict(zip(df_conf[0], df_conf[1])) if not df_conf.empty else {}
             nombre_feria = config.get("Nombre_Empresa", "Nuestra Feria")
             
-            df_prod = pd.read_excel(link_excel, sheet_name="Productos", dtype=str).fillna("")
+            # Cargar productos con gspread
+            df_prod = pd.DataFrame(sh.worksheet("Productos").get_all_records()).fillna("")
             df_prod['Precio'] = pd.to_numeric(df_prod['Precio'], errors='coerce').fillna(0)
             df_prod['Descuento'] = pd.to_numeric(df_prod['Descuento'], errors='coerce').fillna(0)
             
@@ -103,8 +108,7 @@ if "feria" in query_params:
                         st.warning("⚠️ No has seleccionado ningún producto.")
                     else:
                         detalle_pedido_texto = " | ".join(pedido_items)
-                        gc = conectar_google()
-                        sheet_ventas = gc.open_by_url(link_excel).worksheet("Registro de Ventas")
+                        sheet_ventas = sh.worksheet("Registro de Ventas")
                         
                         ahora = datetime.now(TZ_UY)
                         sheet_ventas.append_row([
@@ -131,7 +135,6 @@ if "usuario_logueado" not in st.session_state:
 if st.session_state.usuario_logueado is None:
     st.title("🔒 Acceso al Sistema")
     
-    # Pestañas para elegir login normal o de Super Admin de la plataforma
     tab_login_normal, tab_login_super = st.tabs(["Empleados / Feriantes", "👑 Super Admin (Tú)"])
     
     with tab_login_normal:
@@ -145,7 +148,10 @@ if st.session_state.usuario_logueado is None:
                 st.error("❌ Cuenta suspendida.")
             elif link_excel:
                 try:
-                    df_usuarios = pd.read_excel(link_excel, sheet_name="Usuarios", dtype=str)
+                    gc = conectar_google()
+                    sh = gc.open_by_url(link_excel)
+                    df_usuarios = pd.DataFrame(sh.worksheet("Usuarios").get_all_records()).astype(str)
+                    
                     usuario_valido = df_usuarios[(df_usuarios['Usuario'].str.lower() == usuario_intento.lower()) & (df_usuarios['Clave'] == clave_intento)]
                     
                     if not usuario_valido.empty:
@@ -157,7 +163,7 @@ if st.session_state.usuario_logueado is None:
                     else:
                         st.error("❌ Usuario o Contraseña incorrectos.")
                 except Exception as e:
-                    st.error(f"❌ Error de permisos (401). Asegúrate de compartir el Google Sheet con tu cuenta de servicio: {e}")
+                    st.error(f"❌ Error de permisos o lectura de usuarios: {e}")
             else:
                 st.error("❌ Código de empresa inválido o inactivo en el Master.")
 
@@ -167,7 +173,6 @@ if st.session_state.usuario_logueado is None:
         codigo_a_revisar = st.text_input("Código de Empresa a Auditar (Ej: ILNONNO):", key="emp_super").upper()
         
         if st.button("🚀 Ingresar como Super Admin"):
-            # AQUí DEFINES TU CLAVE MAESTRA SECRETA GLOBAL
             if clave_maestra == "MiClaveSuperSecreta2026": 
                 link_excel = obtener_datos_cliente(codigo_a_revisar)
                 if link_excel and link_excel != "SUSPENDIDO":
@@ -198,7 +203,10 @@ with st.sidebar:
 
 @st.cache_data(ttl=30)
 def cargar_datos_feria(link):
-    df_prod = pd.read_excel(link, sheet_name="Productos", dtype=str).fillna("")
+    gc = conectar_google()
+    sh = gc.open_by_url(link)
+    
+    df_prod = pd.DataFrame(sh.worksheet("Productos").get_all_records()).fillna("")
     df_prod['Precio'] = pd.to_numeric(df_prod['Precio'], errors='coerce').fillna(0)
     df_prod['Descuento'] = pd.to_numeric(df_prod['Descuento'], errors='coerce').fillna(0) 
     
@@ -208,8 +216,8 @@ def cargar_datos_feria(link):
     descuentos = dict(zip(df_prod['Prod_Full'], df_prod['Descuento']))
     nombres_planos = dict(zip(df_prod['Prod_Full'], df_prod['Producto']))
     
-    df_conf = pd.read_excel(link, sheet_name="Configuracion", header=None, dtype=str)
-    config = dict(zip(df_conf[0], df_conf[1]))
+    df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
+    config = dict(zip(df_conf[0], df_conf[1])) if not df_conf.empty else {}
     return productos, precios, descuentos, nombres_planos, config
 
 PRODUCTOS, PRECIOS, DESCUENTOS, NOMBRES, CONFIG = cargar_datos_feria(st.session_state.link_feria)
