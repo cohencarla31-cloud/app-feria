@@ -38,15 +38,29 @@ def obtener_datos_cliente(codigo_empresa):
         st.error(f"Error al conectar con la base maestra: {e}")
     return None
 
+# Función auxiliar para formatear teléfonos de forma internacional (Uruguay por defecto)
+def limpiar_y_formatear_celular(celular_ingresado):
+    num = ''.join(filter(str.isdigit, str(celular_ingresado)))
+    if not num:
+        return ""
+    # Si empieza con el signo + original en el input, evaluamos
+    if str(celular_ingresado).strip().startswith("+"):
+        return num
+    # Si el número local de Uruguay tiene 8 o 9 dígitos (ej: 099123456 o 99123456), anteponemos 598
+    if len(num) <= 9:
+        if num.startswith("0"):
+            num = num[1:] # Quitar el cero inicial local ej: 099... -> 99...
+        return f"598{num}"
+    return num
+
 # ==========================================
-# 3. CARGA DE PRODUCTOS A PRUEBA DE FALLOS
+# 3. CARGA DE PRODUCTOS LIMPIA
 # ==========================================
 @st.cache_data(ttl=30)
 def cargar_datos_feria(link):
     gc = conectar_google()
     sh = gc.open_by_url(link)
     
-    # Leer todas las filas de Productos ignorando errores de cabecera usando get_all_values()
     worksheet_prod = sh.worksheet("Productos")
     filas_prod = worksheet_prod.get_all_values()
     
@@ -55,20 +69,17 @@ def cargar_datos_feria(link):
     descuentos = {}
     nombres_planos = {}
     
-    # Empezamos desde la fila 1 (saltando la cabecera 0)
     for fila in filas_prod[1:]:
-        if len(fila) >= 3 and fila[1].strip() != "":  
+        if len(fila) >= 3 and fila[1].strip() != "" and fila[1].strip().lower() != "producto":  
             emoji = fila[0].strip()
             nombre = fila[1].strip()
             
-            # Limpiar precio (remover símbolos de moneda y comas si las hubiera)
             precio_str = str(fila[2]).replace("$", "").replace(",", "").strip()
             try:
                 precio = float(precio_str) if precio_str else 0.0
             except:
                 precio = 0.0
                 
-            # Limpiar descuento (columna 5 o 6 según orden, por defecto 0)
             desc = 0.0
             if len(fila) >= 6 and str(fila[5]).strip() != "":
                 desc_str = str(fila[5]).replace("%", "").strip()
@@ -83,7 +94,6 @@ def cargar_datos_feria(link):
             descuentos[prod_full] = desc
             nombres_planos[prod_full] = nombre
 
-    # Cargar Configuración
     df_conf = pd.DataFrame(sh.worksheet("Configuracion").get_all_values())
     config = dict(zip(df_conf[0], df_conf[1])) if not df_conf.empty else {}
     
@@ -101,6 +111,7 @@ if "feria" in query_params:
         try:
             productos, precios, descuentos, nombres_planos, config = cargar_datos_feria(link_excel)
             nombre_feria = config.get("Nombre_Empresa", "Nuestra Feria")
+            celular_contacto = config.get("Celular_Contacto", "59899000000")
             
             st.title(f"🛒 {nombre_feria}")
             st.markdown("Elige tus productos, completa tus datos de envío y haz tu pedido al instante.")
@@ -108,7 +119,7 @@ if "feria" in query_params:
             
             st.subheader("1️⃣ Tus Datos de Envío")
             nombre_cliente = st.text_input("Nombre y Apellido:")
-            celular_cliente = st.text_input("Celular (Ej: 099123456):")
+            celular_cliente = st.text_input("Celular (Ej: 099123456 o +549... para otro país):", placeholder="099123456")
             direccion_cliente = st.text_input("Dirección de Envío (Calle, Nro y Esquina):")
             
             st.divider()
@@ -148,13 +159,20 @@ if "feria" in query_params:
                         gc = conectar_google()
                         sheet_ventas = gc.open_by_url(link_excel).worksheet("Registro de Ventas")
                         
+                        celular_formateado = limpiar_y_formatear_celular(celular_cliente)
+                        
                         ahora = datetime.now(TZ_UY)
                         sheet_ventas.append_row([
                             ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
                             "Web", nombre_cliente, detalle_pedido_texto, 1, 0, 
-                            celular_cliente, direccion_cliente, "A definir", "Web - Pendiente"
+                            celular_formateado, direccion_cliente, "A definir", "Web - Pendiente"
                         ])
+                        
                         st.success("✅ ¡Pedido enviado con éxito! El feriante lo está preparando.")
+                        
+                        msg_wsp = f"Hola! Soy *{nombre_cliente}* 🛒.\nAcabo de hacer un pedido web en *{nombre_feria}*:\n\n{detalle_pedido_texto}\n\n📍 Envío a: {direccion_cliente}\n📱 Celular: {celular_formateado}"
+                        num_limpio = limpiar_y_formatear_celular(celular_contacto)
+                        st.link_button("📲 Notificar también por WhatsApp al Feriante", f"https://wa.me/{num_limpio}?text={urllib.parse.quote(msg_wsp)}")
         except Exception as e:
             st.error(f"Error cargando la tienda online: {e}")
     else:
@@ -172,24 +190,20 @@ if "usuario_logueado" not in st.session_state:
 
 if st.session_state.usuario_logueado is None:
     st.title("🔒 Ingreso al Sistema")
-    st.markdown("Introduce los datos proporcionados para administrar tu comercio.")
+    st.markdown("Introduce los datos de acceso para administrar el comercio.")
     
     empresa_intento = st.text_input("Código de Empresa:", key="emp_norm").strip().upper()
     usuario_intento = st.text_input("Usuario:", key="usu_norm").strip()
     clave_intento = st.text_input("Contraseña:", type="password", key="cla_norm")
     
     if st.button("🚪 Ingresar", type="primary"):
-        # 👑 TRUCO SUPER ADMIN INVISIBLE: Si pones código "MASTER" y tu clave secreta
         if empresa_intento == "MASTER" and clave_intento == "MiClaveSuperSecreta2026":
-            # Te deja elegir a qué feria entrar escribiendo su código real de forma interna
             st.session_state.usuario_logueado = "SuperAdmin"
             st.session_state.rol_logueado = "Admin"
-            # Por defecto te asigna el primer link o pedimos el código de feria en otro lado
-            st.session_state.link_feria = obtener_datos_cliente("ILNONNO") # O la feria que gustes auditar
+            st.session_state.link_feria = obtener_datos_cliente("ILNONNO")
             st.session_state.es_super_admin = True
             st.rerun()
             
-        # Ingreso normal de empleados / administradores de la feria
         link_excel = obtener_datos_cliente(empresa_intento)
         if link_excel == "SUSPENDIDO":
             st.error("❌ Cuenta suspendida.")
@@ -248,7 +262,7 @@ idx = 0
 # --- PESTAÑA 1: VENDEDOR ---
 with tabs[idx]:
     st.write("### 📝 Ingresar Pedido Nuevo")
-    cliente = st.text_input("Nombre del Cliente:")
+    cliente_vendedor = st.text_input("Nombre del Cliente:")
     
     prod_buscado = st.selectbox("Buscar Producto:", ["Seleccionar..."] + PRODUCTOS)
     if prod_buscado != "Seleccionar...":
@@ -266,28 +280,82 @@ with tabs[idx]:
             st.info(f"Subtotal: **${subtotal:,.1f}**")
             
             if st.button("Enviar a Caja"):
-                gc = conectar_google()
-                sheet = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
-                ahora = datetime.now(TZ_UY)
-                sheet.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente, NOMBRES.get(prod_buscado), cant, subtotal, "", "", "En Caja"])
-                st.success("✅ Enviado a la caja exitosamente.")
+                if not cliente_vendedor:
+                    st.error("⚠️ Por favor ingresa el nombre del cliente.")
+                else:
+                    gc = conectar_google()
+                    sheet = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                    ahora = datetime.now(TZ_UY)
+                    sheet.append_row([
+                        ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
+                        st.session_state.usuario_logueado, cliente_vendedor, 
+                        NOMBRES.get(prod_buscado), cant, subtotal, "", "", "En Caja"
+                    ])
+                    st.success("✅ ¡Enviado a la caja exitosamente!")
     idx += 1
 
 # --- PESTAÑA 2: CAJA Y COBRO ---
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
-        st.write("### 💳 Cobrar y Enviar Ticket")
+        st.write("### 💳 Cobrar y Enviar Ticket por WhatsApp")
+        cliente_caja = st.text_input("Nombre del Cliente (Caja):")
+        monto_cobro = st.number_input("Monto Total a Cobrar ($):", min_value=0.0, step=10.0, format="%.1f")
         forma_pago = st.selectbox("Forma de Pago:", ["Efectivo", "Tarjeta", "MercadoPago", "FIADO"])
-        celular = st.text_input("Celular del Cliente:")
+        celular_caja = st.text_input("Celular del Cliente (Ej: 099123456 o +549...):", placeholder="099123456", key="cel_caja")
         
-        if st.button("Cerrar Venta y Enviar WhatsApp"):
-            msg = f"👋 Hola, gracias por comprar en *{nombre_empresa}*.\nTu pago con {forma_pago} fue registrado correctamente. ¡Gracias!"
-            num = celular.replace(" ", "").replace("+", "")
-            st.link_button("📲 Enviar Mensaje", f"https://wa.me/{num}?text={urllib.parse.quote(msg)}")
+        if st.button("Registrar Cobro y Generar WhatsApp"):
+            if not cliente_caja or monto_cobro <= 0 or not celular_caja:
+                st.error("⚠️ Completa el Nombre, el Monto y el Celular para enviar el ticket.")
+            else:
+                gc = conectar_google()
+                sheet = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                ahora = datetime.now(TZ_UY)
+                estado_venta = "Fiado Pendiente" if forma_pago == "FIADO" else "Cobrado"
+                
+                celular_formateado = limpiar_y_formatear_celular(celular_caja)
+                
+                sheet.append_row([
+                    ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
+                    st.session_state.usuario_logueado, cliente_caja, 
+                    "Venta en Caja", 1, monto_cobro, celular_formateado, "", forma_pago, estado_venta
+                ])
+                
+                if forma_pago == "FIADO":
+                    msg = f"👋 Hola *{cliente_caja}*, registramos tu compra en *{nombre_empresa}* por un total de *${monto_cobro:,.1f}* bajo la modalidad *FIADO*. ¡Muchas gracias!"
+                else:
+                    msg = f"👋 Hola *{cliente_caja}*, gracias por tu compra en *{nombre_empresa}*. Tu pago de *${monto_cobro:,.1f}* con *{forma_pago}* fue procesado con éxito. ¡Te esperamos pronto!"
+                
+                st.success(f"✅ ¡Venta registrada con éxito ({estado_venta})!")
+                st.link_button("📲 Enviar Mensaje de WhatsApp al Cliente", f"https://wa.me/{celular_formateado}?text={urllib.parse.quote(msg)}")
         idx += 1
 
-# --- PESTAÑA 3: ADMIN ---
+# --- PESTAÑA 3: PANEL ADMIN REAL ---
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
-        st.write("### 📊 Panel Admin")
-        st.success("Panel de Control activo.")
+        st.write("### 📊 Panel de Control y Auditoría de Ventas")
+        st.markdown("Aquí puedes visualizar los registros de ventas y pedidos que van ingresando al sistema.")
+        
+        try:
+            gc = conectar_google()
+            sh = gc.open_by_url(st.session_state.link_feria)
+            sheet_ventas = sh.worksheet("Registro de Ventas")
+            registros_ventas = sheet_ventas.get_all_records()
+            
+            if registros_ventas:
+                df_ventas = pd.DataFrame(registros_ventas)
+                
+                col_m1, col_m2 = st.columns(2)
+                with col_m1:
+                    st.metric(label="Total Registros de Venta", value=len(df_ventas))
+                with col_m2:
+                    if 'Monto' in df_ventas.columns:
+                        total_recaudado = pd.to_numeric(df_ventas['Monto'], errors='coerce').sum()
+                        st.metric(label="Monto Total Acumulado ($)", value=f"${total_recaudado:,.1f}")
+                
+                st.divider()
+                st.subheader("📋 Detalle de la Planilla de Ventas")
+                st.dataframe(df_ventas, use_container_width=True)
+            else:
+                st.info("ℹ️ Aún no hay registros de ventas cargados en esta feria.")
+        except Exception as e:
+            st.error(f"Error cargando las métricas de administración: {e}")
