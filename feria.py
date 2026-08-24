@@ -7,360 +7,268 @@ from google.oauth2.service_account import Credentials
 import json
 
 # ==========================================
-# 0. CONFIGURACIÓN DE PÁGINA Y HORA
+# 1. CONFIGURACIÓN INICIAL (UTC-3 URUGUAY)
 # ==========================================
-st.set_page_config(page_title="Punto de Venta Feria", layout="centered")
-
-# Fijamos la zona horaria a Uruguay (UTC -3) para evitar problemas de servidor
+st.set_page_config(page_title="App Ferias", layout="centered", initial_sidebar_state="collapsed")
 TZ_UY = timezone(timedelta(hours=-3))
 
-# ==========================================
-# 1. SISTEMA DE SEGURIDAD Y ROLES
-# ==========================================
-USUARIOS_PERMITIDOS = {
-    "Juan": {"clave": "juan123", "rol": "Vendedor"},
-    "Pedro": {"clave": "pedro456", "rol": "Vendedor"},
-    "María": {"clave": "maria789", "rol": "Vendedor"},
-    "Caja Principal": {"clave": "caja2026", "rol": "Admin"},
-    "Dueño": {"clave": "admin000", "rol": "Admin"}
-}
+# 🔥 AQUÍ PONES EL LINK DE TU EXCEL MASTER
+LINK_MASTER_SHEET = "https://docs.google.com/spreadsheets/d/TU_ID_DEL_MASTER_AQUI/edit"
 
+# ==========================================
+# 2. CONEXIÓN A GOOGLE Y LECTURA DE MASTER
+# ==========================================
+@st.cache_resource
+def conectar_google():
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_info(json.loads(st.secrets["llave_google"]), scopes=scopes)
+    return gspread.authorize(creds)
+
+def obtener_datos_cliente(codigo_empresa):
+    try:
+        gc = conectar_google()
+        master = gc.open_by_url(LINK_MASTER_SHEET).sheet1
+        registros = master.get_all_records()
+        for fila in registros:
+            if str(fila.get("Codigo_Empresa", "")).upper() == codigo_empresa.upper():
+                if fila.get("Estado", "") == "Activo":
+                    return fila.get("Link_Excel")
+                else:
+                    return "SUSPENDIDO"
+    except Exception as e:
+        st.error(f"Error al conectar con la base maestra: {e}")
+    return None
+
+# ==========================================
+# 3. MODO TIENDA (CATÁLOGO DIGITAL PARA EL CLIENTE FINAL)
+# ==========================================
+query_params = st.query_params
+if "feria" in query_params:
+    codigo_feria = query_params["feria"]
+    link_excel = obtener_datos_cliente(codigo_feria)
+    
+    if link_excel and link_excel != "SUSPENDIDO":
+        try:
+            # Leemos configuración y productos de la feria
+            df_conf = pd.read_excel(link_excel, sheet_name="Configuracion", header=None, dtype=str)
+            config = dict(zip(df_conf[0], df_conf[1]))
+            nombre_feria = config.get("Nombre_Empresa", "Nuestra Feria")
+            
+            df_prod = pd.read_excel(link_excel, sheet_name="Productos", dtype=str).fillna("")
+            df_prod['Precio'] = pd.to_numeric(df_prod['Precio'], errors='coerce').fillna(0)
+            df_prod['Descuento'] = pd.to_numeric(df_prod['Descuento'], errors='coerce').fillna(0)
+            
+            st.title(f"🛒 {nombre_feria}")
+            st.markdown("Elige tus productos, completa tus datos de envío y haz tu pedido al instante.")
+            st.divider()
+            
+            # Formulario de datos del cliente
+            st.subheader("1️⃣ Tus Datos de Envío")
+            nombre_cliente = st.text_input("Nombre y Apellido:")
+            celular_cliente = st.text_input("Celular (Ej: 099123456):")
+            direccion_cliente = st.text_input("Dirección de Envío (Calle, Nro y Esquina):")
+            
+            st.divider()
+            st.subheader("2️⃣ Armá tu Pedido")
+            st.markdown("Selecciona los kilos o cantidades que deseas de cada producto:")
+            
+            # Diccionario para capturar las cantidades seleccionadas por el cliente
+            cantidades_seleccionadas = {}
+            
+            # Mostramos los productos en una lista interactiva limpia
+            for index, row in df_prod.iterrows():
+                emoji = row['Emoji']
+                producto = row['Producto']
+                precio = row['Precio']
+                descuento = row['Descuento']
+                
+                if producto: # Si hay producto válido
+                    # Si tiene descuento, mostramos el precio tachado o aclarado
+                    if descuento > 0:
+                        precio_final = precio * (1 - (descuento / 100))
+                        label_precio = f"${precio_final:,.1f} (¡{descuento}% OFF!)"
+                    else:
+                        label_precio = f"${precio:,.1f}"
+                    
+                    col_info, col_input = st.columns([2, 1])
+                    with col_info:
+                        st.markdown(f"**{emoji} {producto}**  \n*Precio:* {label_precio}")
+                    with col_input:
+                        # Selector de cantidad (kilos o unidades)
+                        cantidades_seleccionadas[producto] = st.number_input(
+                            f"Cant ({producto})", 
+                            min_value=0.0, 
+                            max_value=50.0, 
+                            step=0.5, 
+                            format="%.1f",
+                            key=f"prod_{index}",
+                            label_visibility="collapsed"
+                        )
+                    st.markdown("---")
+            
+            if st.button("🚀 Enviar Pedido a la Feria", type="primary", use_container_width=True):
+                if not nombre_cliente or not celular_cliente or not direccion_cliente:
+                    st.error("⚠️ Por favor completa tu Nombre, Celular y Dirección de Envío.")
+                else:
+                    # Filtramos solo los productos que el cliente pidió (cantidad > 0)
+                    pedido_items = [f"{prod}: {cant}kg/un" for prod, cant in cantidades_seleccionadas.items() if cant > 0]
+                    
+                    if not pedido_items:
+                        st.warning("⚠️ No has seleccionado ningún producto.")
+                    else:
+                        # Unimos todos los ítems en un texto resumido para el registro
+                        detalle_pedido_texto = " | ".join(pedido_items)
+                        
+                        gc = conectar_google()
+                        sheet_ventas = gc.open_by_url(link_excel).worksheet("Registro de Ventas")
+                        
+                        ahora = datetime.now(TZ_UY)
+                        # Guardamos en el Excel de la feria
+                        sheet_ventas.append_row([
+                            ahora.strftime("%d/%m/%Y"), 
+                            ahora.strftime("%H:%M:%S"), 
+                            "Web", 
+                            nombre_cliente, 
+                            detalle_pedido_texto, 
+                            1, 
+                            0, 
+                            celular_cliente, 
+                            direccion_cliente, 
+                            "A definir", 
+                            "Web - Pendiente"
+                        ])
+                        st.success("✅ ¡Pedido enviado con éxito! El feriante lo está preparando y te contactará a la brevedad.")
+        except Exception as e:
+            st.error(f"Error cargando la tienda online: {e}")
+    else:
+        st.error("Feria no encontrada o inactiva.")
+    
+    st.stop()
+
+# ==========================================
+# 4. MODO PRIVADO (SISTEMA DE GESTIÓN INTERNO)
+# ==========================================
 if "usuario_logueado" not in st.session_state:
     st.session_state.usuario_logueado = None
     st.session_state.rol_logueado = None
+    st.session_state.link_feria = None
 
 if st.session_state.usuario_logueado is None:
-    st.title("🔒 Acceso al Sistema")
-    st.write("Por favor, identifícate para comenzar a tomar pedidos.")
+    st.title("🔒 Acceso al Sistema (Empleados)")
     
     with st.container():
-        st.write("---")
-        usuario_intento = st.selectbox("Usuario:", ["Seleccionar..."] + list(USUARIOS_PERMITIDOS.keys()))
+        empresa_intento = st.text_input("Código de Empresa (Ej: ILNONNO):").upper()
+        usuario_intento = st.text_input("Usuario:")
         clave_intento = st.text_input("Contraseña:", type="password")
         
         if st.button("🚪 Ingresar"):
-            if usuario_intento == "Seleccionar...":
-                st.warning("Selecciona un usuario válido.")
+            link_excel = obtener_datos_cliente(empresa_intento)
+            
+            if link_excel == "SUSPENDIDO":
+                st.error("❌ Cuenta suspendida.")
+            elif link_excel:
+                try:
+                    df_usuarios = pd.read_excel(link_excel, sheet_name="Usuarios", dtype=str)
+                    usuario_valido = df_usuarios[(df_usuarios['Usuario'].str.lower() == usuario_intento.lower()) & (df_usuarios['Clave'] == clave_intento)]
+                    
+                    if not usuario_valido.empty:
+                        st.session_state.usuario_logueado = usuario_intento
+                        st.session_state.rol_logueado = usuario_valido.iloc[0]['Rol']
+                        st.session_state.link_feria = link_excel
+                        st.rerun()
+                    else:
+                        st.error("❌ Usuario o Contraseña incorrectos.")
+                except Exception as e:
+                    st.error(f"Error al leer usuarios: {e}")
             else:
-                datos_usuario = USUARIOS_PERMITIDOS.get(usuario_intento)
-                if datos_usuario["clave"] == clave_intento:
-                    st.session_state.usuario_logueado = usuario_intento
-                    st.session_state.rol_logueado = datos_usuario["rol"]
-                    st.rerun()
-                else:
-                    st.error("❌ Contraseña incorrecta.")
-    
-    st.stop() 
+                st.error("❌ Código de empresa inválido.")
+    st.stop()
 
+# --- PANEL PRIVADO ---
 with st.sidebar:
-    color_rol = "🟢" if st.session_state.rol_logueado == "Vendedor" else "👑"
-    st.success(f"{color_rol} Usuario: **{st.session_state.usuario_logueado}**\n\nRol: {st.session_state.rol_logueado}")
+    color_rol = "👑" if st.session_state.rol_logueado == "Admin" else "🛒"
+    st.success(f"{color_rol} Hola, **{st.session_state.usuario_logueado}**\n\nRol: {st.session_state.rol_logueado}")
     if st.button("Cerrar Sesión"):
         st.session_state.usuario_logueado = None
         st.session_state.rol_logueado = None
+        st.session_state.link_feria = None
         st.rerun()
-
-# ==========================================
-# 2. INVENTARIO Y CONEXIONES (APP PRINCIPAL)
-# ==========================================
-LINK_CSV_BALANCE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQM5gsQcK0_77hP18d98tevZ2IaCmEahb8k3J-2Ey7ma5xb5L-YLc-NHQCUKxo8WJBY9Aw8Px5RV3kY/pub?output=csv" 
-LINK_NORMAL_DEL_EXCEL = "https://docs.google.com/spreadsheets/d/1ThaFo2wH9r-jbly0rwqfv3921uVRch3W7U_nXe-PLEU/edit?gid=832040050#gid=832040050"
 
 @st.cache_data(ttl=30)
-def cargar_inventario():
-    try:
-        df = pd.read_csv(LINK_CSV_BALANCE, dtype=str).fillna("")
-        df.columns = df.columns.str.strip()
-        
-        col_prod = next((c for c in df.columns if "roducto" in c.lower()), None)
-        if 'Emoji' in df.columns:
-            df['Prod_Full'] = df['Emoji'].astype(str) + " " + df[col_prod].astype(str)
-        else:
-            df['Prod_Full'] = df[col_prod].astype(str)
-            
-        nombres_planos = dict(zip(df['Prod_Full'], df[col_prod].astype(str).str.strip()))
-        col_precio = next((c for c in df.columns if "recio" in c.lower()), None)
-        df['Precio_Num'] = df[col_precio].astype(str).str.replace('$', '', regex=False).str.replace(',', '.', regex=False) if col_precio else "0"
-        
-        precios = dict(zip(df['Prod_Full'], pd.to_numeric(df['Precio_Num'], errors='coerce').fillna(0)))
-        descuentos = {p: 0 for p in df['Prod_Full']}
-        col_desc = next((c for c in df.columns if "escuento" in c.lower()), None)
-        if col_desc:
-            descuentos = dict(zip(df['Prod_Full'], pd.to_numeric(df[col_desc], errors='coerce').fillna(0)))
-            
-        productos_reales = [p for p in df['Prod_Full'].tolist() if p.strip() != ""]
-        return productos_reales, precios, descuentos, nombres_planos
-    except Exception as e:
-        st.error(f"Error al cargar datos: {e}")
-        return [], {}, {}, {}
+def cargar_datos_feria(link):
+    df_prod = pd.read_excel(link, sheet_name="Productos", dtype=str).fillna("")
+    df_prod['Precio'] = pd.to_numeric(df_prod['Precio'], errors='coerce').fillna(0)
+    df_prod['Descuento'] = pd.to_numeric(df_prod['Descuento'], errors='coerce').fillna(0) 
+    
+    df_prod['Prod_Full'] = df_prod['Emoji'] + " " + df_prod['Producto']
+    productos = df_prod['Prod_Full'].tolist()
+    precios = dict(zip(df_prod['Prod_Full'], df_prod['Precio']))
+    descuentos = dict(zip(df_prod['Prod_Full'], df_prod['Descuento']))
+    nombres_planos = dict(zip(df_prod['Prod_Full'], df_prod['Producto']))
+    
+    df_conf = pd.read_excel(link, sheet_name="Configuracion", header=None, dtype=str)
+    config = dict(zip(df_conf[0], df_conf[1]))
+    return productos, precios, descuentos, nombres_planos, config
 
-PRODUCTOS, PRECIOS, DESCUENTOS, NOMBRES_PLANOS = cargar_inventario()
+PRODUCTOS, PRECIOS, DESCUENTOS, NOMBRES, CONFIG = cargar_datos_feria(st.session_state.link_feria)
+nombre_empresa = CONFIG.get("Nombre_Empresa", "La Feria")
 
-def obtener_ventas_hoy():
-    try:
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(json.loads(st.secrets["llave_google"]), scopes=scopes)
-        gc = gspread.authorize(creds)
-        sheet = gc.open_by_url(LINK_NORMAL_DEL_EXCEL).worksheet("Registro de Ventas")
-        return sheet.get_all_values(), sheet
-    except Exception as e:
-        st.error("Error al conectar con Google Sheets.")
-        return [], None
+st.title(f"🏢 {nombre_empresa}")
 
-if "carrito_vendedor" not in st.session_state: st.session_state.carrito_vendedor = []
-if "carrito_cajero" not in st.session_state: st.session_state.carrito_cajero = []
-
-st.title("🛒 Sistema de Feria")
-
+tabs_nombres = []
+if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
+    tabs_nombres.append("⚖️ Toma de Pedidos")
+if st.session_state.rol_logueado in ["Admin", "Cajero"]:
+    tabs_nombres.append("💰 Caja y Cobro")
 if st.session_state.rol_logueado == "Admin":
-    tabs = st.tabs(["📝 Tomar Pedido", "💻 Retomar y Cobrar (Caja)", "📊 Panel Admin"])
-    tab_vendedor = tabs[0]
-    tab_cajero = tabs[1]
-    tab_admin = tabs[2]
-else:
-    tabs = st.tabs(["📝 Tomar Pedido", "💻 Retomar y Cobrar (Caja)"])
-    tab_vendedor = tabs[0]
-    tab_cajero = tabs[1]
-    tab_admin = None
+    tabs_nombres.append("📊 Panel Admin")
 
-# ==========================================
-# PESTAÑA 1: MODO VENDEDOR
-# ==========================================
-with tab_vendedor:
-    st.write("### Datos del Cliente")
-    col1, col2 = st.columns(2)
-    with col1:
-        vendedor = st.session_state.usuario_logueado
-        st.text_input("Vendedor:", value=vendedor, disabled=True) 
-    with col2:
-        caja = st.selectbox("¿A qué Caja se envía?", ["Caja 1", "Caja 2"], key="caja")
-        
-    cliente = st.text_input("Nombre del Cliente:", key="cliente", placeholder="Ej: María Gómez")
+tabs = st.tabs(tabs_nombres)
+idx = 0
+
+# --- PESTAÑA 1: VENDEDOR ---
+with tabs[idx]:
+    st.write("### 📝 Ingresar Pedido Nuevo")
+    cliente = st.text_input("Nombre del Cliente:")
     
-    st.divider()
-    st.write("### 🔍 Buscador de Productos")
-    
-    col_busc, col_btn = st.columns([8, 2])
-    with col_busc:
-        prod_buscado = st.selectbox("Escribe o busca el producto:", ["Seleccionar..."] + PRODUCTOS, key="buscador_vendedor")
-    with col_btn:
-        st.write("")
-        st.write("")
-        if st.button("➕ Agregar"):
-            if prod_buscado != "Seleccionar..." and prod_buscado not in st.session_state.carrito_vendedor:
-                st.session_state.carrito_vendedor.append(prod_buscado)
-                st.rerun()
-
-    pedidos_vendedor = {}
-    total_vendedor = 0.0
-
-    if st.session_state.carrito_vendedor:
-        st.write("### 🛒 Tu Carrito")
+    prod_buscado = st.selectbox("Buscar Producto:", ["Seleccionar..."] + PRODUCTOS)
+    if prod_buscado != "Seleccionar...":
+        col1, col2 = st.columns(2)
+        with col1: kilos = st.number_input("Kilos:", min_value=0, step=1)
+        with col2: gramos = st.number_input("Gramos:", min_value=0, max_value=999, step=50)
         
-        for p in st.session_state.carrito_vendedor:
-            with st.container():
-                col_nombre, col_quitar = st.columns([8, 2])
-                col_nombre.markdown(f"**{p}**")
-                if col_quitar.button("❌ Quitar", key=f"del_vend_{p}"):
-                    st.session_state.carrito_vendedor.remove(p)
-                    st.rerun()
-                
-                es_unidad = "unidad" in p.lower() or "(u)" in p.lower()
-                tipo_medida = st.radio("Se vende por:", ["Peso (Kgs/Grs)", "Unidades"], index=1 if es_unidad else 0, key=f"medida_vend_{p}", horizontal=True)
-                
-                if tipo_medida == "Unidades":
-                    cant = st.number_input("Cantidad (Unidades):", min_value=0, step=1, key=f"uni_vend_{p}")
-                    cant_txt = f"{int(cant)} Unidades"
-                else:
-                    c_kilos, c_gramos = st.columns(2)
-                    with c_kilos: kilos = st.number_input("Kilos:", min_value=0, step=1, key=f"kg_vend_{p}")
-                    with c_gramos: gramos = st.number_input("Gramos:", min_value=0, max_value=999, step=50, key=f"gr_vend_{p}")
-                    cant = kilos + (gramos / 1000.0)
-                    cant_txt = f"{cant:.3f} Kgs"
-
-                if cant > 0:
-                    precio = PRECIOS.get(p, 0)
-                    subtotal = cant * (precio * (1 - (DESCUENTOS.get(p, 0) / 100)))
-                    pedidos_vendedor[p] = {"cant": cant, "cant_txt": cant_txt, "subtotal": subtotal}
-                    total_vendedor += subtotal
-                st.divider()
-
-    if total_vendedor > 0:
-        st.write(f"### Subtotal: ${total_vendedor:,.1f}")
-        st.info("💡 Si el cliente quiere más cosas después de enviar esto, simplemente haz un nuevo pedido con su mismo nombre.")
-        
-        if st.button("🚀 Enviar a Caja"):
-            if not cliente:
-                st.warning("Falta completar el nombre del Cliente.")
-            else:
-                _, sheet = obtener_ventas_hoy()
-                if sheet:
-                    # Aplicamos la hora exacta de Uruguay
-                    ahora_uy = datetime.now(TZ_UY)
-                    fecha_str = ahora_uy.strftime("%Y-%m-%d")
-                    hora_str = ahora_uy.strftime("%H:%M:%S")
-                    
-                    for p, d in pedidos_vendedor.items():
-                        sheet.append_row([fecha_str, hora_str, vendedor, cliente, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], ""])
-                    
-                    st.success("✅ Pedido enviado a Caja.")
-                    
-                    msg_caja = f"🛒 NUEVO PEDIDO\n👤 Vendedor: {vendedor}\n🗣️ Cliente: {cliente}\n-------------------\n"
-                    for p, d in pedidos_vendedor.items():
-                        msg_caja += f" • {d['cant_txt']} x {p} = ${d['subtotal']:,.1f}\n"
-                    msg_caja += f"-------------------\n💰 SUBTOTAL: ${total_vendedor:,.1f}"
-                    
-                    num_caja = "59893343092" if caja == "Caja 1" else "59899111222"
-                    st.link_button(f"📲 Avisar a {caja} por WhatsApp", f"https://wa.me/{num_caja}?text={urllib.parse.quote(msg_caja)}")
-                    
-                    st.session_state.carrito_vendedor = []
-
-# ==========================================
-# PESTAÑA 2: MODO CAJERO (Retomar y Finalizar)
-# ==========================================
-with tab_cajero:
-    st.write("### 🔎 Buscar Pedidos Pendientes de Hoy")
-    if st.button("🔄 Actualizar Base de Datos"):
-        st.rerun()
-        
-    datos, sheet_caja = obtener_ventas_hoy()
-    # Filtramos pidiendo la fecha exacta de Uruguay
-    hoy_str = datetime.now(TZ_UY).strftime("%Y-%m-%d")
-    clientes_hoy = {}
-    
-    for row in datos:
-        if len(row) >= 7 and row[0] == hoy_str:
-            c_nombre = row[3]
-            c_prod = row[4]
-            c_subt = float(row[6]) if row[6] else 0.0
-            c_cel = row[7] if len(row) >= 8 else ""
+        cant = kilos + (gramos / 1000.0)
+        if cant > 0:
+            precio_orig = PRECIOS.get(prod_buscado, 0)
+            desc_pct = DESCUENTOS.get(prod_buscado, 0)
+            precio_final = precio_orig * (1 - (desc_pct / 100))
+            subtotal = cant * precio_final
             
-            if c_nombre not in clientes_hoy:
-                clientes_hoy[c_nombre] = {"productos": [], "total": 0.0, "celular": c_cel}
+            st.info(f"Subtotal: **${subtotal:,.1f}**")
             
-            clientes_hoy[c_nombre]["productos"].append(f"{c_prod} (${c_subt:,.1f})")
-            clientes_hoy[c_nombre]["total"] += c_subt
+            if st.button("Enviar a Caja"):
+                gc = conectar_google()
+                sheet = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                ahora = datetime.now(TZ_UY)
+                sheet.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente, NOMBRES.get(prod_buscado), cant, subtotal, "", "", "En Caja"])
+                st.success("✅ Enviado a la caja exitosamente.")
+    idx += 1
 
-    lista_clientes = ["Seleccionar Cliente..."] + list(clientes_hoy.keys())
-    cliente_seleccionado = st.selectbox("Selecciona el Cliente a cobrar:", lista_clientes)
-    
-    if cliente_seleccionado != "Seleccionar Cliente...":
-        datos_cliente = clientes_hoy[cliente_seleccionado]
-        tel_cajero = st.text_input("Celular del Cliente (Para enviar el ticket):", value=datos_cliente["celular"], key="tel_cajero")
+# --- PESTAÑA 2: CAJA Y COBRO ---
+if st.session_state.rol_logueado in ["Admin", "Cajero"]:
+    with tabs[idx]:
+        st.write("### 💳 Cobrar y Enviar Ticket")
+        forma_pago = st.selectbox("Forma de Pago:", ["Efectivo", "Tarjeta", "MercadoPago", "FIADO"])
+        celular = st.text_input("Celular del Cliente:")
         
-        st.info(f"**El cliente ya pidió (${datos_cliente['total']:,.1f}):**\n\n" + "\n".join([f"• {p}" for p in datos_cliente["productos"]]))
-        
-        st.divider()
-        st.write("### ➕ ¿Agregar un producto de último momento?")
-        
-        col_busc_c, col_btn_c = st.columns([8, 2])
-        with col_busc_c:
-            prod_caja = st.selectbox("Buscar extra:", ["Seleccionar..."] + PRODUCTOS, key="buscador_cajero")
-        with col_btn_c:
-            st.write("")
-            st.write("")
-            if st.button("➕ Agregar Extra"):
-                if prod_caja != "Seleccionar..." and prod_caja not in st.session_state.carrito_cajero:
-                    st.session_state.carrito_cajero.append(prod_caja)
-                    st.rerun()
-        
-        pedidos_extra = {}
-        total_extra = 0.0
-        
-        for p in st.session_state.carrito_cajero:
-            with st.container():
-                col_nombre, col_quitar = st.columns([8, 2])
-                col_nombre.markdown(f"**{p}**")
-                if col_quitar.button("❌ Quitar", key=f"del_caj_{p}"):
-                    st.session_state.carrito_cajero.remove(p)
-                    st.rerun()
-                
-                es_unidad = "unidad" in p.lower() or "(u)" in p.lower()
-                tipo_medida = st.radio("Se vende por:", ["Peso (Kgs/Grs)", "Unidades"], index=1 if es_unidad else 0, key=f"medida_caj_{p}", horizontal=True)
-                
-                if tipo_medida == "Unidades":
-                    cant = st.number_input("Cantidad (Unidades):", min_value=0, step=1, key=f"uni_caj_{p}")
-                    cant_txt = f"{int(cant)} Unidades"
-                else:
-                    c_kilos, c_gramos = st.columns(2)
-                    with c_kilos: kilos = st.number_input("Kilos:", min_value=0, step=1, key=f"kg_caj_{p}")
-                    with c_gramos: gramos = st.number_input("Gramos:", min_value=0, max_value=999, step=50, key=f"gr_caj_{p}")
-                    cant = kilos + (gramos / 1000.0)
-                    cant_txt = f"{cant:.3f} Kgs"
+        if st.button("Cerrar Venta y Enviar WhatsApp"):
+            msg = f"👋 Hola, gracias por comprar en *{nombre_empresa}*.\nTu pago con {forma_pago} fue registrado correctamente. ¡Gracias!"
+            num = celular.replace(" ", "").replace("+", "")
+            st.link_button("📲 Enviar Mensaje", f"https://wa.me/{num}?text={urllib.parse.quote(msg)}")
+        idx += 1
 
-                if cant > 0:
-                    precio = PRECIOS.get(p, 0)
-                    subtotal = cant * (precio * (1 - (DESCUENTOS.get(p, 0) / 100)))
-                    pedidos_extra[p] = {"cant": cant, "cant_txt": cant_txt, "subtotal": subtotal}
-                    total_extra += subtotal
-                st.divider()
-        
-        gran_total = datos_cliente['total'] + total_extra
-        st.write(f"### 💰 GRAN TOTAL A COBRAR: ${gran_total:,.1f}")
-        
-        if st.button("✅ Cerrar Venta y Enviar Ticket al Cliente"):
-            if sheet_caja and pedidos_extra:
-                # Aplicamos la hora exacta de Uruguay también aquí
-                ahora_uy = datetime.now(TZ_UY)
-                fecha_str = ahora_uy.strftime("%Y-%m-%d")
-                hora_str = ahora_uy.strftime("%H:%M:%S")
-                
-                for p, d in pedidos_extra.items():
-                    sheet_caja.append_row([fecha_str, hora_str, st.session_state.usuario_logueado, cliente_seleccionado, NOMBRES_PLANOS.get(p, p), d['cant'], d['subtotal'], tel_cajero])
-            
-            msg_final = f"👋 Hola {cliente_seleccionado}, gracias por comprar en la feria.\n\n"
-            msg_final += f"🧾 *RESUMEN DE TU COMPRA:*\n"
-            msg_final += "\n".join([f"• {p}" for p in datos_cliente["productos"]]) + "\n"
-            if pedidos_extra:
-                msg_final += "\n".join([f"• {d['cant_txt']} x {p} (${d['subtotal']:,.1f})" for p, d in pedidos_extra.items()]) + "\n"
-            msg_final += f"-------------------\n💰 TOTAL ABONADO: ${gran_total:,.1f}\n\n¡Que lo disfrutes! 🍎"
-            
-            if tel_cajero:
-                num_cliente = tel_cajero.replace(" ", "").replace("+", "")
-                st.link_button("📲 Enviar Ticket FINAL al Cliente", f"https://wa.me/{num_cliente}?text={urllib.parse.quote(msg_final)}")
-            else:
-                st.warning("⚠️ Carga el número de celular arriba si quieres enviarle el ticket por WhatsApp.")
-            
-            st.session_state.carrito_cajero = []
-
-# ==========================================
-# PESTAÑA 3: PANEL ADMIN
-# ==========================================
-if tab_admin:
-    with tab_admin:
-        st.write("### 📊 Panel de Control del Día")
-        st.caption("Solo los administradores o cajas pueden ver esta sección.")
-        
-        datos_admin, _ = obtener_ventas_hoy()
-        
-        if datos_admin and len(datos_admin) > 1:
-            df_ventas = pd.DataFrame(datos_admin)
-            for i in range(len(df_ventas.columns), 8):
-                df_ventas[i] = ""
-                
-            df_ventas = df_ventas.iloc[:, :8]
-            df_ventas.columns = ["Fecha", "Hora", "Vendedor", "Cliente", "Producto", "Cantidad", "Subtotal", "Celular"]
-            
-            if df_ventas.iloc[0]["Fecha"].lower() == "fecha":
-                df_ventas = df_ventas.iloc[1:]
-            
-            # Filtramos también por la fecha de Uruguay actual
-            hoy_str = datetime.now(TZ_UY).strftime("%Y-%m-%d")
-            df_ventas_hoy = df_ventas[df_ventas["Fecha"] == hoy_str].copy()
-            
-            if not df_ventas_hoy.empty:
-                df_ventas_hoy["Subtotal"] = pd.to_numeric(df_ventas_hoy["Subtotal"].astype(str).str.replace(',', '.'), errors="coerce").fillna(0)
-                total_recaudado = df_ventas_hoy["Subtotal"].sum()
-                
-                st.metric(label="💰 Recaudación Total de Hoy", value=f"${total_recaudado:,.1f}")
-                
-                st.write("---")
-                st.write("#### 🏆 Ventas por Vendedor")
-                ventas_por_vend = df_ventas_hoy.groupby("Vendedor")["Subtotal"].sum().reset_index()
-                
-                ventas_por_vend["Subtotal"] = ventas_por_vend["Subtotal"].apply(lambda x: f"${x:,.1f}")
-                st.dataframe(ventas_por_vend, hide_index=True, use_container_width=True)
-            else:
-                st.info("Todavía no hay ventas registradas en el día de hoy.")
-        else:
-            st.info("El Registro de Ventas está vacío. Comienza a tomar pedidos.")
+# --- PESTAÑA 3: ADMIN ---
+if st.session_state.rol_logueado == "Admin":
+    with tabs[idx]:
+        st.write("### 📊 Métricas de Hoy")
+        st.success("Panel de Control activo.")
