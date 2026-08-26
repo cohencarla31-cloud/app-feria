@@ -19,13 +19,25 @@ if 'c_rk' not in st.session_state: st.session_state.c_rk = 0
 if 'carrito_vendedor' not in st.session_state: st.session_state.carrito_vendedor = []
 
 # ==========================================
-# 2. CONEXIÓN A GOOGLE
+# 2. CONEXIÓN Y CACHÉ OPTIMIZADO (ANTI-ERROR 429)
 # ==========================================
 @st.cache_resource
 def conectar_google():
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(json.loads(st.secrets["llave_google"]), scopes=scopes)
     return gspread.authorize(creds)
+
+# 🚀 Novedad: Carga de ventas optimizada en memoria (Dura 15 segundos)
+@st.cache_data(ttl=15)
+def obtener_ventas(link_excel):
+    try:
+        gc = conectar_google()
+        return gc.open_by_url(link_excel).worksheet("Registro de Ventas").get_all_values()
+    except Exception as e:
+        return []
+
+def limpiar_cache_ventas():
+    obtener_ventas.clear()
 
 def obtener_datos_cliente(codigo_empresa):
     try:
@@ -49,9 +61,6 @@ def limpiar_y_formatear_celular(celular_ingresado):
         return f"598{num}"
     return num
 
-# ==========================================
-# 3. CARGA DE DATOS A PRUEBA DE FALLOS
-# ==========================================
 @st.cache_data(ttl=30)
 def cargar_datos_feria(link):
     gc = conectar_google()
@@ -102,7 +111,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, nombres_planos, clientes_dict, config
 
 # ==========================================
-# 4. MODO TIENDA (CATÁLOGO DIGITAL PÚBLICO)
+# 3. MODO TIENDA (CATÁLOGO DIGITAL PÚBLICO)
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -181,6 +190,9 @@ if "feria" in query_params:
                                 ws_cli.append_row([nombre_cliente.strip(), celular_formateado, "Web"])
                         except: pass
                         
+                        limpiar_cache_ventas() # Limpiamos para que lo vea la caja enseguida
+                        cargar_datos_feria.clear() # Limpiamos para registrar al nuevo cliente
+                        
                         st.success("✅ ¡Muchas gracias por tu compra! A la brevedad será armada y despachada.")
                         
                         if celular_feriante:
@@ -195,7 +207,7 @@ if "feria" in query_params:
     st.stop()
 
 # ==========================================
-# 5. MODO PRIVADO Y ACCESO
+# 4. MODO PRIVADO Y ACCESO
 # ==========================================
 if "usuario_logueado" not in st.session_state:
     st.session_state.usuario_logueado = None
@@ -251,15 +263,8 @@ if st.session_state.usuario_logueado is None:
         else: st.error("❌ Código de empresa inválido.")
     st.stop()
 
-# --- LECTURA GLOBAL Y ÚNICA DE DATOS (ESTO EVITA EL ERROR 429) ---
-gc = conectar_google()
-try:
-    sh_feria = gc.open_by_url(st.session_state.link_feria)
-    ws_ventas = sh_feria.worksheet("Registro de Ventas")
-    ventas_data = ws_ventas.get_all_values()
-except Exception as e:
-    st.error(f"⚠️ Error de conexión con Google: {e}")
-    st.stop()
+# Lectura global con caché para evitar bloqueos
+ventas_data_global = obtener_ventas(st.session_state.link_feria)
 
 with st.sidebar:
     st.success(f"Hola, **{st.session_state.usuario_logueado}**\n\nRol: {st.session_state.rol_logueado}")
@@ -275,7 +280,6 @@ celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_cont
 
 st.title(f"🏢 {nombre_empresa}")
 
-# SEGURIDAD DE PESTAÑAS
 tabs_nombres = []
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]: tabs_nombres.append("⚖️ Toma de Pedidos")
 if st.session_state.rol_logueado in ["Admin", "Cajero"]: 
@@ -296,7 +300,6 @@ with tabs[idx]:
         st.success(st.session_state.msg_vendedor)
         if 'link_vendedor' in st.session_state and st.session_state.link_vendedor:
             st.link_button("📲 Avisar al Cajero (Enviar WhatsApp)", st.session_state.link_vendedor, type="primary")
-        
         st.divider()
         if st.button("✅ Crear Nuevo Pedido"):
             del st.session_state.msg_vendedor
@@ -304,7 +307,12 @@ with tabs[idx]:
             st.rerun()
         st.stop() 
 
-    modo_vendedor = st.radio("Modo de trabajo:", ["🛍️ Nueva Venta Local", "🌐 Armar Pedido Web Pendiente"], horizontal=True)
+    col_m1, col_m2 = st.columns([3,1])
+    with col_m1: modo_vendedor = st.radio("Modo de trabajo:", ["🛍️ Nueva Venta Local", "🌐 Armar Pedido Web Pendiente"], horizontal=True)
+    with col_m2: 
+        if st.button("🔄 Sincronizar", help="Actualizar la pantalla al instante"): 
+            limpiar_cache_ventas()
+            st.rerun()
     st.divider()
 
     if modo_vendedor == "🛍️ Nueva Venta Local":
@@ -398,33 +406,33 @@ with tabs[idx]:
                     celular_limpio = limpiar_y_formatear_celular(celular_vendedor)
                     ahora = datetime.now(TZ_UY)
                     
+                    gc = conectar_google()
+                    sh_feria = gc.open_by_url(st.session_state.link_feria)
+                    
+                    sh_feria.worksheet("Registro de Ventas").append_row([
+                        ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
+                        st.session_state.usuario_logueado, cliente_vendedor, det, 1, total_carrito, celular_limpio, "", "", "En Caja", total_ahorro, items_json
+                    ])
+                    
                     try:
-                        ws_ventas.append_row([
-                            ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
-                            st.session_state.usuario_logueado, cliente_vendedor, det, 1, total_carrito, celular_limpio, "", "", "En Caja", total_ahorro, items_json
-                        ])
-                        
-                        try:
-                            ws_cli = sh_feria.worksheet("Clientes")
-                            nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
-                            if cliente_vendedor.strip().lower() not in nombres_existentes:
-                                ws_cli.append_row([cliente_vendedor.strip(), celular_limpio, "Local"])
-                        except: pass
-                        
-                        st.session_state.msg_vendedor = "✅ ¡Pedido enviado a la Caja exitosamente!"
-                        if celular_feriante_local:
-                            st.session_state.link_vendedor = f"https://wa.me/{limpiar_y_formatear_celular(celular_feriante_local)}?text={urllib.parse.quote(f'💳 *CAJA (Vendedor: {st.session_state.usuario_logueado})*\nCliente: {cliente_vendedor}\nTotal a cobrar: ${total_carrito:,.1f}\n{det}')}"
-                        st.session_state.carrito_vendedor = []
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al guardar: {e}")
+                        ws_cli = sh_feria.worksheet("Clientes")
+                        nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
+                        if cliente_vendedor.strip().lower() not in nombres_existentes:
+                            ws_cli.append_row([cliente_vendedor.strip(), celular_limpio, "Local"])
+                    except: pass
+                    
+                    limpiar_cache_ventas()
+                    st.session_state.msg_vendedor = "✅ ¡Pedido enviado a la Caja exitosamente!"
+                    if celular_feriante_local:
+                        st.session_state.link_vendedor = f"https://wa.me/{limpiar_y_formatear_celular(celular_feriante_local)}?text={urllib.parse.quote(f'💳 *CAJA (Vendedor: {st.session_state.usuario_logueado})*\nCliente: {cliente_vendedor}\nTotal a cobrar: ${total_carrito:,.1f}\n{det}')}"
+                    st.session_state.carrito_vendedor = []
+                    st.rerun()
 
-        # --- RETOMAR PEDIDOS ---
         st.divider()
         st.subheader("🔄 Retomar Pedidos (Aún no cobrados)")
         try:
             mis_pendientes = []
-            for i, row in enumerate(ventas_data):
+            for i, row in enumerate(ventas_data_global):
                 if i == 0: continue
                 estado = str(row[10]).strip() if len(row) > 10 else ""
                 vendedor_fila = str(row[2]).strip()
@@ -440,7 +448,10 @@ with tabs[idx]:
                             items_rec = json.loads(p['json'])
                             if items_rec: st.session_state.carrito_vendedor = items_rec
                         except: pass
-                        ws_ventas.update_cell(p['fila'], 11, "Cancelado (Retomado)")
+                        # BATCH UPDATE PARA RETOMAR
+                        gc = conectar_google()
+                        gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas").update_acell(f"K{p['fila']}", "Cancelado (Retomado)")
+                        limpiar_cache_ventas()
                         st.session_state.v_rk += 1
                         st.rerun()
         except: pass
@@ -449,7 +460,7 @@ with tabs[idx]:
         st.write("### 📦 Armar Pedido Web (Ajuste de Pesos en Balanza)")
         try:
             pedidos_web = []
-            for i, row in enumerate(ventas_data):
+            for i, row in enumerate(ventas_data_global):
                 if i == 0: continue
                 if len(row) > 10 and "web" in str(row[10]).lower() and "pendiente" in str(row[10]).lower():
                     pedidos_web.append({
@@ -527,16 +538,23 @@ with tabs[idx]:
                         if observaciones: det_real += f" | 📝 Obs: {observaciones}"
                         
                         items_json = json.dumps(nuevos_items)
-                        ws_ventas.update_cell(pedido_sel["fila_idx"], 3, st.session_state.usuario_logueado) 
-                        ws_ventas.update_cell(pedido_sel["fila_idx"], 5, f"(Web Ajustado) {det_real}")
-                        ws_ventas.update_cell(pedido_sel["fila_idx"], 7, total_real_calculado)
-                        ws_ventas.update_cell(pedido_sel["fila_idx"], 11, "Web - En Caja")
+                        fila = pedido_sel["fila_idx"]
                         
-                        try: ws_ventas.update_cell(pedido_sel["fila_idx"], 12, total_ahorro_web)
-                        except: pass
-                        try: ws_ventas.update_cell(pedido_sel["fila_idx"], 13, items_json)
-                        except: pass
+                        # 🚀 ACTUALIZACIÓN EN BLOQUE (1 sola petición a Google)
+                        gc = conectar_google()
+                        ws_ventas = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
                         
+                        updates = [
+                            {'range': f'C{fila}', 'values': [[st.session_state.usuario_logueado]]},
+                            {'range': f'E{fila}', 'values': [[f"(Web Ajustado) {det_real}"]]},
+                            {'range': f'G{fila}', 'values': [[total_real_calculado]]},
+                            {'range': f'K{fila}', 'values': [["Web - En Caja"]]},
+                            {'range': f'L{fila}', 'values': [[total_ahorro_web]]},
+                            {'range': f'M{fila}', 'values': [[items_json]]}
+                        ]
+                        ws_ventas.batch_update(updates)
+                        
+                        limpiar_cache_ventas()
                         st.session_state.msg_vendedor = "✅ ¡Pesos confirmados y enviado a Caja!"
                         if celular_feriante_local:
                             st.session_state.link_vendedor = f"https://wa.me/{limpiar_y_formatear_celular(celular_feriante_local)}?text={urllib.parse.quote(f'💳 *CAJA (Pedido WEB)*\nCliente: {pedido_sel['cliente']}\nTotal a cobrar: ${total_real_calculado:,.1f}')}"
@@ -547,12 +565,17 @@ with tabs[idx]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 2: CAJA Y COBRO (MULTIVENDEDOR)
+# PESTAÑA 2: CAJA Y COBRO
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
-        st.write("### 💳 Módulo de Caja y Cobro")
-        
+        col_c1, col_c2 = st.columns([3,1])
+        with col_c1: st.write("### 💳 Módulo de Caja y Cobro")
+        with col_c2: 
+            if st.button("🔄 Refrescar Caja", help="Toca aquí si te acaban de enviar un pedido."):
+                limpiar_cache_ventas()
+                st.rerun()
+                
         if 'ticket_generado' in st.session_state:
             st.success(st.session_state.ticket_generado["msg"])
             if st.session_state.ticket_generado["link"]:
@@ -564,7 +587,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
 
         try:
             pedidos_en_caja = []
-            for i, row in enumerate(ventas_data):
+            for i, row in enumerate(ventas_data_global):
                 if i == 0: continue
                 estado = str(row[10]).strip() if len(row) > 10 else ""
                 if estado in ["En Caja", "Web - En Caja"]:
@@ -586,10 +609,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     if c_cliente and c_monto > 0:
                         est = "Fiado Pendiente" if c_pago == "FIADO" else "Cobrado"
                         cel_fmt = limpiar_y_formatear_celular(c_cel)
-                        ws_ventas.append_row([
+                        gc = conectar_google()
+                        gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas").append_row([
                             datetime.now(TZ_UY).strftime("%d/%m/%Y"), datetime.now(TZ_UY).strftime("%H:%M:%S"), 
                             st.session_state.usuario_logueado, c_cliente, "Caja Directa", 1, c_monto, cel_fmt, "", c_pago, est, 0, "{}"
                         ])
+                        limpiar_cache_ventas()
                         msg = f"👋 Hola *{c_cliente}*, gracias por comprar en *{nombre_empresa}*.\nTotal: *${c_monto:,.1f}* ({c_pago}).\n💚 ¡Te esperamos pronto!"
                         st.session_state.ticket_generado = {"msg": f"✅ ¡Cobro registrado ({est})!", "link": f"https://wa.me/{cel_fmt}?text={urllib.parse.quote(msg)}" if cel_fmt else None}
                         st.rerun()
@@ -615,14 +640,21 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     if st.button(f"💵 Cobrar ${c_monto:,.1f} y Cerrar Ticket", type="primary"):
                         est = "Fiado Pendiente" if c_pago == "FIADO" else "Cobrado"
                         if "Web" in pedido_c['detalle']: est = "Web - " + est
-                        
                         cel_fmt = limpiar_y_formatear_celular(c_cel)
                         
-                        ws_ventas.update_cell(pedido_c['fila'], 4, c_cliente)
-                        ws_ventas.update_cell(pedido_c['fila'], 7, c_monto)
-                        ws_ventas.update_cell(pedido_c['fila'], 8, cel_fmt)
-                        ws_ventas.update_cell(pedido_c['fila'], 10, c_pago)
-                        ws_ventas.update_cell(pedido_c['fila'], 11, est)
+                        # 🚀 ACTUALIZACIÓN EN BLOQUE DE CAJA (1 sola petición a Google)
+                        fila = pedido_c['fila']
+                        gc = conectar_google()
+                        ws_ventas = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                        ws_ventas.batch_update([
+                            {'range': f'D{fila}', 'values': [[c_cliente]]},
+                            {'range': f'G{fila}', 'values': [[c_monto]]},
+                            {'range': f'H{fila}', 'values': [[cel_fmt]]},
+                            {'range': f'J{fila}', 'values': [[c_pago]]},
+                            {'range': f'K{fila}', 'values': [[est]]}
+                        ])
+                        
+                        limpiar_cache_ventas()
                         
                         msg = f"👋 Hola *{c_cliente}*, gracias por comprar en *{nombre_empresa}*.\nTotal: *${c_monto:,.1f}* ({c_pago})."
                         if ahorro_total > 0: msg += f"\n🎉 ¡Con esta compra tuviste un ahorro total de *${ahorro_total:,.1f}*!"
@@ -640,7 +672,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         st.write("### 🌐 Gestión de Pedidos Online")
         try:
             hay_web = False
-            for row in ventas_data[1:]:
+            for row in ventas_data_global[1:]:
                 if len(row) > 10 and "web" in str(row[10]).lower():
                     estado = str(row[10]).strip()
                     if estado == "Web - Pendiente":
@@ -667,7 +699,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         st.write("### 🛵 Control de Entregas a Domicilio")
         try:
             entregas_pendientes = []
-            for i, row in enumerate(ventas_data):
+            for i, row in enumerate(ventas_data_global):
                 if i == 0: continue
                 estado = str(row[10]).strip() if len(row) > 10 else ""
                 direc = str(row[8]).strip() if len(row) > 8 else ""
@@ -682,7 +714,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         c_e1, c_e2 = st.columns(2)
                         with c_e1:
                             if st.button("🛵 Marcar Entregado", key=f"ent_{p['fila']}"):
-                                ws_ventas.update_cell(p['fila'], 11, "Entregado")
+                                gc = conectar_google()
+                                gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas").update_acell(f"K{p['fila']}", "Entregado")
+                                limpiar_cache_ventas()
                                 st.rerun()
                         with c_e2: st.link_button("📲 Avisar 'Va en Camino'", f"https://wa.me/{limpiar_y_formatear_celular(p['cel'])}?text={urllib.parse.quote(f'Hola {p['cliente']} 🛵. Tu pedido de {nombre_empresa} va en camino.')}")
                         st.markdown("---")
@@ -698,7 +732,7 @@ if st.session_state.rol_logueado == "Admin":
             total_recaudado = 0.0
             fiados = []
             
-            for row in ventas_data[1:]:
+            for row in ventas_data_global[1:]:
                 if len(row) > 6:
                     if len(row) > 4 and "ajeno" not in str(row[4]).lower():
                         estado = str(row[10]).lower() if len(row) > 10 else ""
@@ -711,7 +745,7 @@ if st.session_state.rol_logueado == "Admin":
                         fiados.append(row)
             
             c1, c2 = st.columns(2)
-            c1.metric("Total Ventas Cerradas", len(ventas_data)-1)
+            c1.metric("Total Ventas Cerradas", len(ventas_data_global)-1)
             c2.metric("Recaudación Propia Neta ($)", f"${total_recaudado:,.1f}")
             st.divider()
             
