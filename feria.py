@@ -251,12 +251,14 @@ if st.session_state.usuario_logueado is None:
         else: st.error("❌ Código de empresa inválido.")
     st.stop()
 
-# --- PANEL PRIVADO: CONEXIÓN ÚNICA Y GLOBAL (EVITA BLOQUEOS API) ---
+# --- LECTURA GLOBAL Y ÚNICA DE DATOS (ESTO EVITA EL ERROR 429) ---
 gc = conectar_google()
 try:
     sh_feria = gc.open_by_url(st.session_state.link_feria)
+    ws_ventas = sh_feria.worksheet("Registro de Ventas")
+    ventas_data = ws_ventas.get_all_values()
 except Exception as e:
-    st.error(f"⚠️ Error de conexión con Google: Demasiadas peticiones. Espera 1 minuto y recarga la página. ({e})")
+    st.error(f"⚠️ Error de conexión con Google: {e}")
     st.stop()
 
 with st.sidebar:
@@ -273,6 +275,7 @@ celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_cont
 
 st.title(f"🏢 {nombre_empresa}")
 
+# SEGURIDAD DE PESTAÑAS
 tabs_nombres = []
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]: tabs_nombres.append("⚖️ Toma de Pedidos")
 if st.session_state.rol_logueado in ["Admin", "Cajero"]: 
@@ -396,7 +399,7 @@ with tabs[idx]:
                     ahora = datetime.now(TZ_UY)
                     
                     try:
-                        sh_feria.worksheet("Registro de Ventas").append_row([
+                        ws_ventas.append_row([
                             ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
                             st.session_state.usuario_logueado, cliente_vendedor, det, 1, total_carrito, celular_limpio, "", "", "En Caja", total_ahorro, items_json
                         ])
@@ -420,11 +423,8 @@ with tabs[idx]:
         st.divider()
         st.subheader("🔄 Retomar Pedidos (Aún no cobrados)")
         try:
-            ws_ventas = sh_feria.worksheet("Registro de Ventas")
-            data_v = ws_ventas.get_all_values()
-            
             mis_pendientes = []
-            for i, row in enumerate(data_v):
+            for i, row in enumerate(ventas_data):
                 if i == 0: continue
                 estado = str(row[10]).strip() if len(row) > 10 else ""
                 vendedor_fila = str(row[2]).strip()
@@ -443,15 +443,11 @@ with tabs[idx]:
                         ws_ventas.update_cell(p['fila'], 11, "Cancelado (Retomado)")
                         st.session_state.v_rk += 1
                         st.rerun()
-        except Exception as e:
-            st.error("Error al buscar pedidos para retomar.")
+        except: pass
     
     else:
         st.write("### 📦 Armar Pedido Web (Ajuste de Pesos en Balanza)")
         try:
-            ventas_ws = sh_feria.worksheet("Registro de Ventas")
-            ventas_data = ventas_ws.get_all_values()
-            
             pedidos_web = []
             for i, row in enumerate(ventas_data):
                 if i == 0: continue
@@ -531,14 +527,14 @@ with tabs[idx]:
                         if observaciones: det_real += f" | 📝 Obs: {observaciones}"
                         
                         items_json = json.dumps(nuevos_items)
-                        ventas_ws.update_cell(pedido_sel["fila_idx"], 3, st.session_state.usuario_logueado) 
-                        ventas_ws.update_cell(pedido_sel["fila_idx"], 5, f"(Web Ajustado) {det_real}")
-                        ventas_ws.update_cell(pedido_sel["fila_idx"], 7, total_real_calculado)
-                        ventas_ws.update_cell(pedido_sel["fila_idx"], 11, "Web - En Caja")
+                        ws_ventas.update_cell(pedido_sel["fila_idx"], 3, st.session_state.usuario_logueado) 
+                        ws_ventas.update_cell(pedido_sel["fila_idx"], 5, f"(Web Ajustado) {det_real}")
+                        ws_ventas.update_cell(pedido_sel["fila_idx"], 7, total_real_calculado)
+                        ws_ventas.update_cell(pedido_sel["fila_idx"], 11, "Web - En Caja")
                         
-                        try: ventas_ws.update_cell(pedido_sel["fila_idx"], 12, total_ahorro_web)
+                        try: ws_ventas.update_cell(pedido_sel["fila_idx"], 12, total_ahorro_web)
                         except: pass
-                        try: ventas_ws.update_cell(pedido_sel["fila_idx"], 13, items_json)
+                        try: ws_ventas.update_cell(pedido_sel["fila_idx"], 13, items_json)
                         except: pass
                         
                         st.session_state.msg_vendedor = "✅ ¡Pesos confirmados y enviado a Caja!"
@@ -567,11 +563,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             st.divider()
 
         try:
-            ws_ventas = sh_feria.worksheet("Registro de Ventas")
-            data_v = ws_ventas.get_all_values()
-            
             pedidos_en_caja = []
-            for i, row in enumerate(data_v):
+            for i, row in enumerate(ventas_data):
                 if i == 0: continue
                 estado = str(row[10]).strip() if len(row) > 10 else ""
                 if estado in ["En Caja", "Web - En Caja"]:
@@ -646,7 +639,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 🌐 Gestión de Pedidos Online")
         try:
-            ventas_data = sh_feria.worksheet("Registro de Ventas").get_all_values()
             hay_web = False
             for row in ventas_data[1:]:
                 if len(row) > 10 and "web" in str(row[10]).lower():
@@ -663,7 +655,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         cli, det, monto, cel, direc = row[3], row[4], row[6], row[7], row[8]
                         with st.expander(f"🟡 ARMADO Y ESPERANDO COBRO: {cli} - ${monto}"):
                             st.write(f"**Detalle:** {det}\n\n**Dirección:** {direc}")
-                            st.info("Este pedido está en la Caja esperando el pago.")
+                            st.info("Este pedido ya fue armado y está en la Caja esperando el pago.")
             
             if not hay_web: st.info("ℹ️ No hay pedidos web pendientes en este momento.")
         except: st.error("Error leyendo pedidos web.")
@@ -674,9 +666,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 🛵 Control de Entregas a Domicilio")
         try:
-            ws_ventas = sh_feria.worksheet("Registro de Ventas")
-            ventas_data = ws_ventas.get_all_values()
-            
             entregas_pendientes = []
             for i, row in enumerate(ventas_data):
                 if i == 0: continue
@@ -692,14 +681,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         st.write(f"*Detalle:* {p['detalle']} ({p['estado']})")
                         c_e1, c_e2 = st.columns(2)
                         with c_e1:
-                            if st.button("🛵 Marcar como Entregado", key=f"ent_{p['fila']}"):
+                            if st.button("🛵 Marcar Entregado", key=f"ent_{p['fila']}"):
                                 ws_ventas.update_cell(p['fila'], 11, "Entregado")
-                                st.success("¡Entrega completada!")
                                 st.rerun()
-                        with c_e2:
-                            st.link_button("📲 Avisar 'Va en Camino'", f"https://wa.me/{limpiar_y_formatear_celular(p['cel'])}?text={urllib.parse.quote(f'Hola {p['cliente']} 🛵. Tu pedido de {nombre_empresa} va en camino a tu domicilio.')}")
+                        with c_e2: st.link_button("📲 Avisar 'Va en Camino'", f"https://wa.me/{limpiar_y_formatear_celular(p['cel'])}?text={urllib.parse.quote(f'Hola {p['cliente']} 🛵. Tu pedido de {nombre_empresa} va en camino.')}")
                         st.markdown("---")
-            else: st.info("No hay pedidos pendientes de entrega a domicilio.")
+            else: st.info("No hay entregas pendientes.")
         except: pass
     idx += 1
 
@@ -708,8 +695,6 @@ if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
         st.write("### 📊 Panel de Control y Fiados")
         try:
-            ventas_data = sh_feria.worksheet("Registro de Ventas").get_all_values()
-            
             total_recaudado = 0.0
             fiados = []
             
