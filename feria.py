@@ -196,11 +196,13 @@ if "feria" in query_params:
                         
                         st.success("✅ ¡Muchas gracias por tu compra! A la brevedad será armada y despachada.")
                         
-                        if celular_feriante:
-                            msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n\n👤 Cliente: {nombre_cliente}\n📱 Celular: {celular_formateado}\n📍 Dirección: {direccion_cliente}\n📦 Productos:\n{detalle_pedido_texto}"
-                            if observaciones_cliente: msg_feriante += f"\n\n💬 Notas: {observaciones_cliente}"
-                            num_feriante_limpio = limpiar_y_formatear_celular(celular_feriante)
-                            st.link_button("📲 Enviar Aviso al Feriante por WhatsApp", f"https://wa.me/{num_feriante_limpio}?text={urllib.parse.quote(msg_feriante)}")
+                        num_feriante_limpio = limpiar_y_formatear_celular(celular_feriante)
+                        if not num_feriante_limpio: num_feriante_limpio = "59893343092" # Fallback de seguridad
+                        
+                        msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n\n👤 Cliente: {nombre_cliente}\n📱 Celular: {celular_formateado}\n📍 Dirección: {direccion_cliente}\n📦 Productos:\n{detalle_pedido_texto}"
+                        if observaciones_cliente: msg_feriante += f"\n\n💬 Notas: {observaciones_cliente}"
+                        
+                        st.link_button("📲 Enviar Aviso al Feriante por WhatsApp", f"https://wa.me/{num_feriante_limpio}?text={urllib.parse.quote(msg_feriante)}", type="primary")
         except Exception as e:
             st.error(f"Error cargando la tienda online: {e}")
     else:
@@ -277,10 +279,11 @@ with st.sidebar:
 
 PRODUCTOS, PRECIOS, DESCUENTOS, NOMBRES, CLIENTES_DICT, CONFIG = cargar_datos_feria(st.session_state.link_feria)
 nombre_empresa = CONFIG.get("nombre_empresa", "La Feria")
-celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_contacto", ""))
+celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_contacto", "59893343092"))
 
 st.title(f"🏢 {nombre_empresa}")
 
+# SEGURIDAD DE PESTAÑAS
 tabs_nombres = []
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]: tabs_nombres.append("⚖️ Toma de Pedidos")
 if st.session_state.rol_logueado in ["Admin", "Cajero"]: 
@@ -297,7 +300,7 @@ idx = 0
 # PESTAÑA 1: VENDEDOR
 # =======================================================
 with tabs[idx]:
-    # BLOQUE DE ÉXITO AISLADO: Ahora el resto de pestañas NO desaparece
+    # BLOQUE DE ÉXITO AISLADO
     if 'msg_vendedor' in st.session_state:
         st.success(st.session_state.msg_vendedor)
         if 'link_vendedor' in st.session_state and st.session_state.link_vendedor:
@@ -307,15 +310,14 @@ with tabs[idx]:
         if st.button("✅ Crear Nuevo Pedido"):
             del st.session_state.msg_vendedor
             if 'link_vendedor' in st.session_state: del st.session_state.link_vendedor
-            st.session_state.cli_v_temp = "" # Resetea la memoria del cliente retomado
+            st.session_state.cli_v_temp = "" 
             st.session_state.cel_v_temp = ""
             st.rerun()
     else:
-        # TODO EL MÓDULO DEL VENDEDOR SE EJECUTA SÓLO SI NO HAY MENSAJE DE ÉXITO
         col_m1, col_m2 = st.columns([3,1])
         with col_m1: modo_vendedor = st.radio("Modo de trabajo:", ["🛍️ Nueva Venta Local", "🌐 Armar Pedido Web Pendiente"], horizontal=True)
         with col_m2: 
-            if st.button("🔄 Sincronizar", help="Actualizar la pantalla al instante"): 
+            if st.button("🔄 Sincronizar"): 
                 limpiar_cache_ventas()
                 st.rerun()
         st.divider()
@@ -327,8 +329,8 @@ with tabs[idx]:
             tipo_cli_sel = st.selectbox("Seleccionar Cliente de la Base:", opciones_cli)
             
             if tipo_cli_sel == "Escribir nuevo...":
-                cliente_vendedor = st.text_input("Nombre del Cliente:", value=st.session_state.cli_v_temp)
-                celular_vendedor = st.text_input("Celular (Opcional):", value=st.session_state.cel_v_temp, placeholder="099123456")
+                cliente_vendedor = st.text_input("Nombre del Cliente:", value=st.session_state.get('cli_v_temp', ''))
+                celular_vendedor = st.text_input("Celular (Opcional):", value=st.session_state.get('cel_v_temp', ''), placeholder="099123456")
             else:
                 cliente_vendedor = tipo_cli_sel
                 celular_sugerido = CLIENTES_DICT.get(cliente_vendedor, "")
@@ -428,43 +430,14 @@ with tabs[idx]:
                         
                         limpiar_cache_ventas()
                         st.session_state.msg_vendedor = "✅ ¡Pedido enviado a la Caja exitosamente!"
-                        if celular_feriante_local:
-                            st.session_state.link_vendedor = f"https://wa.me/{limpiar_y_formatear_celular(celular_feriante_local)}?text={urllib.parse.quote(f'💳 *NUEVO PEDIDO EN CAJA*\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\n👤 Cliente: {cliente_vendedor}\n💰 Total a cobrar: ${total_carrito:,.1f}\n📦 Detalle: {det}')}"
+                        
+                        num_cajero = limpiar_y_formatear_celular(celular_feriante_local)
+                        if not num_cajero: num_cajero = "59893343092"
+                        st.session_state.link_vendedor = f"https://wa.me/{num_cajero}?text={urllib.parse.quote(f'💳 *NUEVO PEDIDO EN CAJA*\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\n👤 Cliente: {cliente_vendedor}\n💰 Total a cobrar: ${total_carrito:,.1f}\n📦 Detalle: {det}')}"
+                        
                         st.session_state.carrito_vendedor = []
                         st.rerun()
 
-            st.divider()
-            st.subheader("🔄 Retomar Pedidos (Aún no cobrados)")
-            try:
-                mis_pendientes = []
-                for i, row in enumerate(ventas_data_global):
-                    if i == 0: continue
-                    estado = str(row[10]).strip() if len(row) > 10 else ""
-                    vendedor_fila = str(row[2]).strip()
-                    if estado == "En Caja" and vendedor_fila == st.session_state.usuario_logueado:
-                        mis_pendientes.append({"fila": i+1, "cliente": row[3], "cel": row[7] if len(row)>7 else "", "total": row[6], "json": row[12] if len(row) > 12 else "[]"})
-                
-                for p in mis_pendientes:
-                    col_r1, col_r2 = st.columns([3,1])
-                    with col_r1: st.write(f"📦 **{p['cliente']}** - ${p['total']}")
-                    with col_r2:
-                        if st.button("Retomar", key=f"ret_{p['fila']}"):
-                            try:
-                                items_rec = json.loads(p['json'])
-                                if items_rec: st.session_state.carrito_vendedor = items_rec
-                            except: pass
-                            
-                            st.session_state.cli_v_temp = p['cliente']
-                            st.session_state.cel_v_temp = p['cel']
-                            
-                            # Marcamos como Cancelado para que no se duplique en caja
-                            gc = conectar_google()
-                            gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas").update_acell(f"K{p['fila']}", "Cancelado (Retomado)")
-                            limpiar_cache_ventas()
-                            st.session_state.v_rk += 1
-                            st.rerun()
-            except: pass
-        
         else:
             st.write("### 📦 Armar Pedido Web (Ajuste de Pesos en Balanza)")
             try:
@@ -563,9 +536,12 @@ with tabs[idx]:
                             ws_ventas.batch_update(updates)
                             
                             limpiar_cache_ventas()
-                            st.session_state.msg_vendedor = "✅ ¡Pesos web confirmados y enviado a Caja!"
-                            if celular_feriante_local:
-                                st.session_state.link_vendedor = f"https://wa.me/{limpiar_y_formatear_celular(celular_feriante_local)}?text={urllib.parse.quote(f'💳 *CAJA (Pedido WEB Ajustado)*\nCliente: {pedido_sel['cliente']}\nTotal a cobrar: ${total_real_calculado:,.1f}')}"
+                            st.session_state.msg_vendedor = "✅ ¡Pesos confirmados y enviado a Caja!"
+                            
+                            num_cajero = limpiar_y_formatear_celular(celular_feriante_local)
+                            if not num_cajero: num_cajero = "59893343092"
+                            st.session_state.link_vendedor = f"https://wa.me/{num_cajero}?text={urllib.parse.quote(f'💳 *CAJA (Pedido WEB Ajustado)*\nCliente: {pedido_sel['cliente']}\nTotal a cobrar: ${total_real_calculado:,.1f}')}"
+                            
                             st.session_state.v_rk += 1
                             st.rerun()
             except Exception as e:
@@ -580,7 +556,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         col_c1, col_c2 = st.columns([3,1])
         with col_c1: st.write("### 💳 Módulo de Caja y Cobro")
         with col_c2: 
-            if st.button("🔄 Refrescar Caja"):
+            if st.button("🔄 Refrescar Caja", help="Toca aquí si te acaban de enviar un pedido."):
                 limpiar_cache_ventas()
                 st.rerun()
                 
@@ -604,7 +580,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         "total": float(str(row[6]).replace("$","").replace(",",".") if row[6] else 0), 
                         "celular": row[7] if len(row)>7 else "",
                         "estado": estado,
-                        "ahorro": float(str(row[11]).replace("$","").replace(",",".") if len(row)>11 and row[11] else 0)
+                        "ahorro": float(str(row[11]).replace("$","").replace(",",".") if len(row)>11 and row[11] else 0),
+                        "json": row[12] if len(row) > 12 else "[]"
                     })
 
             if not pedidos_en_caja:
@@ -612,9 +589,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 st.write("#### 💰 Cobro Manual / Directo")
                 c_cliente = st.text_input("Cliente:", key="cm_cli")
                 c_monto = st.number_input("Monto ($):", min_value=0.0, step=10.0, key="cm_mon")
-                c_pago = st.selectbox("Forma de Pago:", ["Efectivo", "Tarjeta", "MercadoPago", "FIADO", "Pendiente (Pago al Entregar)"], key="cm_pag")
+                c_pago = st.selectbox("Forma de Pago:", ["Efectivo", "Tarjeta", "MercadoPago", "FIADO", "Pendiente Pago"], key="cm_pag")
                 c_cel = st.text_input("Celular:", placeholder="099...", key="cm_cel")
-                
                 if st.button("Cobrar Venta Directa", type="primary"):
                     if c_cliente and c_monto > 0:
                         est = "Fiado Pendiente" if c_pago == "FIADO" else ("Pendiente Pago" if "Pendiente" in c_pago else "Cobrado")
@@ -627,7 +603,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         limpiar_cache_ventas()
                         
                         if "Pendiente" in c_pago:
-                            msg = f"👋 Hola *{c_cliente}*, tu pedido de *{nombre_empresa}* está listo.\nTotal a abonar: *${c_monto:,.1f}*.\n💚 ¡Te avisaremos cuando vaya en camino!"
+                            msg = f"👋 Hola *{c_cliente}*, tu pedido de *{nombre_empresa}* está listo.\nTotal a abonar: *${c_monto:,.1f}*."
                         else:
                             msg = f"👋 Hola *{c_cliente}*, gracias por comprar en *{nombre_empresa}*.\nTotal: *${c_monto:,.1f}* ({c_pago}).\n💚 ¡Te esperamos pronto!"
                             
@@ -650,20 +626,23 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     
                     c_cliente = st.text_input("Cliente:", value=pedido_c['cliente'], key="cp_cli")
                     c_monto = st.number_input("Monto Total ($):", value=pedido_c['total'], min_value=0.0, step=10.0, key="cp_mon")
-                    c_pago = st.selectbox("Forma de Pago:", ["Efectivo", "Tarjeta", "MercadoPago", "FIADO", "Pendiente (Pago al Entregar)"], key="cp_pag")
+                    
+                    opciones_pago = ["Efectivo", "Tarjeta", "MercadoPago", "FIADO", "Pendiente Pago"]
+                    def_pago_idx = 4 if "Web" in pedido_c['estado'] else 0
+                    c_pago = st.selectbox("Forma de Pago:", opciones_pago, index=def_pago_idx, key="cp_pag")
+                    
                     c_cel = st.text_input("Celular:", value=pedido_c['celular'], key="cp_cel")
                     
                     ahorro_total = pedido_c['ahorro']
                     if ahorro_total > 0: st.success(f"Este pedido incluye un ahorro de: ${ahorro_total:,.1f}")
                     
-                    col_bt1, col_bt2 = st.columns(2)
+                    col_bt1, col_bt2, col_bt3 = st.columns(3)
                     with col_bt1:
-                        if st.button(f"💵 Cerrar Ticket y Generar WhatsApp", type="primary", use_container_width=True):
+                        if st.button(f"💵 Cerrar Ticket", type="primary", use_container_width=True):
                             est = "Fiado Pendiente" if c_pago == "FIADO" else ("Pendiente Pago" if "Pendiente" in c_pago else "Cobrado")
                             if "Web" in pedido_c['estado']: est = "Web - " + est
                             
                             cel_fmt = limpiar_y_formatear_celular(c_cel)
-                            
                             fila = pedido_c['fila']
                             gc = conectar_google()
                             ws_ventas = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
@@ -674,11 +653,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 {'range': f'J{fila}', 'values': [[c_pago]]},
                                 {'range': f'K{fila}', 'values': [[est]]}
                             ])
-                            
                             limpiar_cache_ventas()
                             
                             if "Pendiente" in c_pago:
-                                msg = f"👋 Hola *{c_cliente}*, tu pedido de *{nombre_empresa}* está listo.\nTotal a abonar al recibir: *${c_monto:,.1f}*."
+                                msg = f"👋 Hola *{c_cliente}*, tu pedido de *{nombre_empresa}* está listo.\nTotal a abonar: *${c_monto:,.1f}*."
                             else:
                                 msg = f"👋 Hola *{c_cliente}*, gracias por comprar en *{nombre_empresa}*.\nTotal: *${c_monto:,.1f}* ({c_pago})."
                                 
@@ -687,8 +665,26 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             
                             st.session_state.ticket_generado = {"msg": f"✅ ¡Ticket de {c_cliente} cerrado ({est})!", "link": f"https://wa.me/{cel_fmt}?text={urllib.parse.quote(msg)}" if cel_fmt else None}
                             st.rerun()
+                            
                     with col_bt2:
-                        if st.button("❌ Cancelar / Eliminar Pedido", type="secondary", use_container_width=True):
+                        if st.button("🔄 Retomar para Editar", use_container_width=True):
+                            try:
+                                items_rec = json.loads(pedido_c['json'])
+                                if items_rec: st.session_state.carrito_vendedor = items_rec
+                            except: pass
+                            
+                            st.session_state.cli_v_temp = c_cliente
+                            st.session_state.cel_v_temp = c_cel
+                            
+                            gc = conectar_google()
+                            gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas").update_acell(f"K{pedido_c['fila']}", "Cancelado (Retomado)")
+                            limpiar_cache_ventas()
+                            
+                            st.session_state.ticket_generado = {"msg": "✅ Pedido devuelto al carrito. Ve a la pestaña 'Toma de Pedidos' para editarlo y volver a enviarlo.", "link": None}
+                            st.rerun()
+                            
+                    with col_bt3:
+                        if st.button("❌ Eliminar Pedido", type="secondary", use_container_width=True):
                             gc = conectar_google()
                             gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas").update_acell(f"K{pedido_c['fila']}", "Cancelado")
                             limpiar_cache_ventas()
@@ -762,12 +758,9 @@ if st.session_state.rol_logueado == "Admin":
         try:
             total_recaudado = 0.0
             fiados = []
-            
-            # Tabla de registros limpios para el Admin
             filas_validas_admin = []
             
             for row in ventas_data_global[1:]:
-                # Evitamos las filas vacías
                 if len(row) > 6 and row[0].strip() != "":
                     estado = str(row[10]).lower() if len(row) > 10 else ""
                     if "cancelado" not in estado and "caja" not in estado and "pendiente" not in estado: 
@@ -778,7 +771,6 @@ if st.session_state.rol_logueado == "Admin":
                     if "fiado" in str(row[9]).lower() if len(row) > 9 else "" and "cancelado" not in estado:
                         fiados.append(row)
                     
-                    # Agregar a la tabla de Admin
                     filas_validas_admin.append({
                         "Fecha": row[0], "Hora": row[1], "Vendedor": row[2], 
                         "Cliente": row[3], "Monto": row[6], "Pago": row[9] if len(row)>9 else "", 
@@ -786,7 +778,7 @@ if st.session_state.rol_logueado == "Admin":
                     })
             
             c1, c2 = st.columns(2)
-            c1.metric("Total Ventas Cerradas", len(filas_validas_admin))
+            c1.metric("Total Movimientos", len(filas_validas_admin))
             c2.metric("Recaudación Propia Neta ($)", f"${total_recaudado:,.1f}")
             st.divider()
             
