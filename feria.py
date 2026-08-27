@@ -107,12 +107,17 @@ def agrupar_pedidos(data, filtro_estados=None):
             
             ordenes[key]["total"] += subt
             ordenes[key]["ahorro"] += ahorro
-            ordenes[key]["items"].append({"producto": row[4], "cantidad": cant, "subtotal": subt})
+            ordenes[key]["items"].append({"producto": row[4], "cantidad": cant, "subtotal": subt, "ahorro": ahorro, "tipo": "Propio"})
             
     for k, v in ordenes.items():
-        # Si el JSON guardado estaba vacío, generamos ítems base para que no quede huérfano
-        if v["json"] == "[]" and v["items"]:
-            v["json"] = json.dumps([{"producto": it["producto"], "cantidad": it["cantidad"], "cantidad_txt": f"{it['cantidad']}un", "subtotal": it["subtotal"], "tipo": "Propio"} for it in v["items"]])
+        # Si el JSON guardado estaba vacío, se genera un respaldo con los ítems leídos
+        try:
+            parsed_json = json.loads(v["json"])
+            if not parsed_json and v["items"]:
+                v["json"] = json.dumps([{"producto": it["producto"], "cantidad": it["cantidad"], "cantidad_txt": f"{it['cantidad']}un", "subtotal": it["subtotal"], "ahorro": it["ahorro"], "tipo": "Propio"} for it in v["items"]])
+        except:
+            v["json"] = json.dumps([{"producto": it["producto"], "cantidad": it["cantidad"], "cantidad_txt": f"{it['cantidad']}un", "subtotal": it["subtotal"], "ahorro": it["ahorro"], "tipo": "Propio"} for it in v["items"]])
+            
         v["detalle"] = " | ".join([f"{item['producto']} ({item['cantidad']})" for item in v["items"]])
         
     lista_ordenes = list(ordenes.values())
@@ -227,7 +232,7 @@ if "feria" in query_params:
                             n_plano = nombres_planos[p]
                             subt = c * (precios[p] * (1 - descuentos[p]/100))
                             ahor = c * (precios[p] * (descuentos[p]/100))
-                            filas_web.append([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), "Web Online", nombre_cliente.strip(), n_plano, c, subt, celular_formateado, "Pendiente Pago", "Web - Pendiente", direccion_cliente, ahoror if 'ahoror' in locals() else ahor, "{}"])
+                            filas_web.append([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), "Web Online", nombre_cliente.strip(), n_plano, c, subt, celular_formateado, "Pendiente Pago", "Web - Pendiente", direccion_cliente, ahor, "{}"])
                             items_estructurados.append({"producto": n_plano, "cantidad": c, "cantidad_txt": f"{c}kg", "subtotal": subt, "ahorro": ahor, "tipo": "Propio"})
                     for p, u in unidades_seleccionadas.items():
                         if u > 0:
@@ -241,7 +246,7 @@ if "feria" in query_params:
                         st.warning("⚠️ No has seleccionado ningún producto.")
                     else:
                         json_items = json.dumps(items_estructurados)
-                        for f_w in filas_web: f_w[12] = json_items # Inyectar JSON en la última columna
+                        for f_w in filas_web: f_w[12] = json_items 
                         
                         if observaciones_cliente: filas_web[0][4] += f" | 📝 Obs: {observaciones_cliente}" 
                             
@@ -373,8 +378,12 @@ def ui_retomar_pedidos(ventas_data):
                     if st.button("Retomar", key=f"ret_{p['filas'][0]}"):
                         try:
                             items_rec = json.loads(p['json'])
-                            if items_rec: st.session_state.carrito_vendedor = items_rec
-                        except: pass
+                            if items_rec:
+                                st.session_state.carrito_vendedor = items_rec
+                            else:
+                                st.session_state.carrito_vendedor = p['items']
+                        except:
+                            st.session_state.carrito_vendedor = p['items']
                         
                         st.session_state.cli_v_temp = p['cliente']
                         st.session_state.cel_v_temp = p['celular']
@@ -528,9 +537,11 @@ with tabs[idx]:
                     if not num_cajero: num_cajero = "59893343092"
                     st.session_state.link_vendedor = f"https://wa.me/{num_cajero}?text={urllib.parse.quote(f'💳 *NUEVO PEDIDO EN CAJA*\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\n👤 Cliente: {cliente_vendedor}\n💰 Total a cobrar: ${total_carrito:,.1f}\n📦 Detalle: {det}')}"
                     
+                    # LIMPIEZA ABSOLUTA DE MEMORIA Y ESTADO PARA NUEVA VENTA
                     st.session_state.carrito_vendedor = []
                     st.session_state.cli_v_temp = ""
                     st.session_state.cel_v_temp = ""
+                    st.session_state.v_rk += 1
                     st.rerun()
 
         # BLOQUE DE WHATSAPP VISIBLE EN TOMA DE PEDIDOS
@@ -541,6 +552,10 @@ with tabs[idx]:
             if st.button("✅ Crear Nuevo Pedido / Seguir Trabajando", type="secondary"):
                 del st.session_state.msg_vendedor
                 if 'link_vendedor' in st.session_state: del st.session_state.link_vendedor
+                st.session_state.cli_v_temp = ""
+                st.session_state.cel_v_temp = ""
+                st.session_state.carrito_vendedor = []
+                st.session_state.v_rk += 1
                 st.rerun()
 
         st.divider()
@@ -769,8 +784,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             
                             try:
                                 items_rec = json.loads(pedido_c['json'])
-                                if items_rec: st.session_state.carrito_vendedor = items_rec
-                            except: pass
+                                if items_rec:
+                                    st.session_state.carrito_vendedor = items_rec
+                                else:
+                                    st.session_state.carrito_vendedor = pedido_c['items']
+                            except:
+                                st.session_state.carrito_vendedor = pedido_c['items']
                             
                             st.session_state.cli_v_temp = c_cliente
                             st.session_state.cel_v_temp = c_cel
