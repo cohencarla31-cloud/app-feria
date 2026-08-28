@@ -1177,4 +1177,3 @@ if st.session_state.rol_logueado == "Admin":
                 
         except Exception as e:
             st.error(f"Error generando reportes pro: {e}")
-                    
