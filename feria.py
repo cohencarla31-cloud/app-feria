@@ -198,7 +198,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, medidas_planas
 
 # ==========================================
-# 3. MODO TIENDA PÚBLICA (WIZARD CON PASOS EXPLICADOS Y SELECTOR DE PRODUCTOS)
+# 3. MODO TIENDA PÚBLICA (WIZARD CON PASOS)
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -215,19 +215,20 @@ if "feria" in query_params:
             st.title(f"🛒 {nombre_feria}")
             if bienvenida_dia: st.info(f"🔥 **OFERTAS Y NOVEDADES DE HOY:**\n\n{bienvenida_dia}")
             
-            # Explicación previa de los pasos
             with st.expander("ℹ️ ¿Cómo realizar tu pedido online? (Pasos)", expanded=(st.session_state.web_step == 1)):
                 st.markdown("""
                 1. **Tus Datos:** Ingresa tu nombre, celular y dirección de envío.
-                2. **Armar Pedido:** Selecciona del desplegable los productos que deseas y añade la cantidad exacta (kilos, gramos o unidades).
+                2. **Armar Pedido:** Selecciona del desplegable los productos que deseas y añade la cantidad exacta.
                 3. **Revisión:** Verifica el total estimado de tu compra.
-                4. **Enviar WhatsApp:** Envía el comprobante directamente al feriante para asegurar tu lugar.
+                4. **Enviar WhatsApp:** Envía el comprobante directamente al feriante para asegurar tu pedido.
                 """)
             
             st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>📋 Paso {st.session_state.web_step} de 4</h3>", unsafe_allow_html=True)
             st.divider()
 
-            # PASO 1: DATOS
+            if 'cantidades_web' not in st.session_state:
+                st.session_state.cantidades_web = {p: 0.0 for p in productos}
+
             if st.session_state.web_step == 1:
                 st.subheader("1️⃣ Tus Datos de Entrega")
                 st.session_state.cli_web_nombre = st.text_input("Nombre y Apellido:", value=st.session_state.get('cli_web_nombre', ''))
@@ -243,7 +244,6 @@ if "feria" in query_params:
                         st.session_state.web_step = 2
                         st.rerun()
 
-            # PASO 2: SELECTOR DE PRODUCTOS (ESTILO LOCAL)
             elif st.session_state.web_step == 2:
                 st.subheader("2️⃣ Elegir Productos")
                 
@@ -289,7 +289,7 @@ if "feria" in query_params:
                 st.divider()
                 colA, colB = st.columns(2)
                 with colA:
-                    if st.button("⬅️ Atrás (Datos)", use_container_width=True):
+                    if st.button("⬅️ Atrás", use_container_width=True):
                         st.session_state.web_step = 1
                         st.rerun()
                 with colB:
@@ -300,7 +300,6 @@ if "feria" in query_params:
                             st.session_state.web_step = 3
                             st.rerun()
 
-            # PASO 3: REVISIÓN
             elif st.session_state.web_step == 3:
                 st.subheader("3️⃣ Revisión de tu Pedido")
                 
@@ -356,7 +355,6 @@ if "feria" in query_params:
                         st.session_state.web_step = 4
                         st.rerun()
 
-            # PASO 4: WHATSAPP OBLIGATORIO
             elif st.session_state.web_step == 4:
                 st.subheader("4️⃣ Paso Final: Enviar WhatsApp")
                 st.success("✅ ¡Pedido guardado con éxito!")
@@ -562,7 +560,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
             if prod_buscado != "Seleccionar...":
                 medida_p = MEDIDAS.get(prod_buscado, "kg")
                 if medida_p == "un":
-                    cant = float(st.number_input("Cantidad (unidades)", min_value=0, step=1, key=f"uv_{st.session_state.v_rk}"))
+                    cant = float(st.number_input("Cantidad (unidades):", min_value=0, step=1, key=f"uv_{st.session_state.v_rk}"))
                     formato_txt = f"{int(cant)}un"
                 else:
                     c1, c2 = st.columns(2)
@@ -739,7 +737,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 5: ENTREGAS A DOMICILIO (SIN COBRO, SOLO LOGÍSTICA)
+# PESTAÑA 5: ENTREGAS A DOMICILIO (LOGÍSTICA)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -762,7 +760,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             limpiar_cache_ventas()
                             st.rerun()
                     with c2:
-                        st.link_button("📲 Avisar 'Va en Camino'", f"https://wa.me/{limpiar_y_formatear_celular(ent['celular'])}?text={urllib.parse.quote(f'Hola {ent[\"cliente\"]}. Tu pedido va en camino a tu domicilio.')}")
+                        # Corregido el problema de sintaxis con f-string y comillas
+                        cli_nombre = ent['cliente']
+                        link_wsp = f"https://wa.me/{limpiar_y_formatear_celular(ent['celular'])}?text={urllib.parse.quote('Hola ' + cli_nombre + '. Tu pedido va en camino a tu domicilio.')}"
+                        st.link_button("📲 Avisar 'Va en Camino'", link_wsp)
                     st.markdown("---")
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
@@ -777,12 +778,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             todas_o = agrupar_pedidos(ventas_data_global)
             fiados_activos = [o for o in todas_o if "fiado" in o['pago'].lower() or "fiado" in o['estado'].lower()]
             
-            # Agrupar por cliente
             clientes_fiado = {}
             for f_ord in fiados_activos:
                 cli = f_ord['cliente']
-                if cli not in clientes_dewar: clientes_fiado[cli] = {"total": 0.0, "pedidos": []}
-                # Solo sumar si no está cancelado
+                if cli not in clientes_fiado: clientes_fiado[cli] = {"total": 0.0, "pedidos": []}
                 if "cancelado" not in f_ord['estado'].lower():
                     clientes_fiado[cli]["total"] += f_ord['total']
                     clientes_fiado[cli]["pedidos"].append(f_ord)
@@ -804,7 +803,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 
                                 if nuevo_saldo <= 0:
                                     msg_wsp = f"👋 Hola {c_name}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu deuda ha sido saldada por completo! Muchas gracias."
-                                    # Marcar como cobrado el primer pedido o todos si canceló completo
                                     gc = conectar_google()
                                     ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
                                     for pd in c_info["pedidos"]:
