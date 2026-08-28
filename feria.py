@@ -451,16 +451,16 @@ celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_cont
 st.title(f"🏢 {nombre_empresa}")
 
 # ==========================================
-# 5. PESTAÑAS Y ROLES ORGANIZADOS
+# 5. PESTAÑAS Y ROLES ORDENADOS
 # ==========================================
 tabs_nombres = []
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]: 
     tabs_nombres.append("📝 Tomar Pedido")
 if st.session_state.rol_logueado in ["Admin", "Cajero"]: 
     tabs_nombres.append("💰 Caja y Cobro")
+    tabs_nombres.append("💳 Cuentas A Cobrar")
     tabs_nombres.append("🌐 Estado Pedidos Web")
     tabs_nombres.append("🛵 Entregas a Domicilio")
-    tabs_nombres.append("💳 Cuentas A Cuenta")
 if st.session_state.rol_logueado == "Admin": 
     tabs_nombres.append("📊 Panel Admin")
     tabs_nombres.append("📈 Reportes Pro")
@@ -592,7 +592,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                         for idx_item, it in enumerate(p_sel["items"]):
                             medida_p = MEDIDAS_PLANAS.get(it["producto"], "kg")
                             
-                            # Muestra lado a lado lo que pidió y lo que va a pesar
                             col_ori, col_pes = st.columns(2)
                             with col_ori:
                                 st.markdown(f"**Pidió:** {it['producto']}")
@@ -608,7 +607,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     with c_g: gr = st.number_input("Gramos", value=float(g_in), step=50.0, key=f"w_g_{idx_w}_{idx_item}")
                                     p_real = kr + (gr / 1000.0)
                             
-                            pr_u = precios.get(it["producto"], precios.get(nombres_planos.get(it["producto"], it["producto"]), 100))
+                            pr_u = precios.get(it["producto"], precios.get(nombres_planos.get(it["producto"], it["producto"], 100)))
                             desc_u = descuentos.get(it["producto"], 0)
                             sub_r = p_real * (pr_u * (1 - desc_u/100))
                             tot_real += sub_r
@@ -634,13 +633,48 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                             st.rerun()
             except Exception as e: st.error(f"Error: {e}")
 
-        # --- SUB-TAB 3: RETOMAR DESDE TOMAR PEDIDO ---
+        # --- SUB-TAB 3: RETOMAR PENDIENTES ---
         with sub_tomar_3:
+            def ui_retomar_pedidos(ventas_data):
+                st.write("### 🔄 Panel de Pedidos para Retomar")
+                try:
+                    mis_pendientes = [p for p in agrupar_pedidos(ventas_data, ["En Caja", "Web - En Caja"]) if p['vendedor'] == st.session_state.usuario_logueado]
+                    if not mis_pendientes:
+                        st.info("No tienes pedidos tuyos esperando en la Caja.")
+                    else:
+                        for p in mis_pendientes:
+                            col_r1, col_r2 = st.columns([3,1])
+                            tipo_origen = "🌐 WEB" if "Web" in p['estado'] else "🏪 LOCAL"
+                            with col_r1: st.write(f"📦 **[{tipo_origen}] {p['cliente']}** - ${p['total']:,.1f} ({p['fecha']} - {p['hora']})")
+                            with col_r2:
+                                if st.button("Retomar", key=f"ret_panel_{p['filas'][0]}"):
+                                    try:
+                                        items_rec = json.loads(p['json'])
+                                        if items_rec: st.session_state.carrito_vendedor = items_rec
+                                        else: st.session_state.carrito_vendedor = p['items']
+                                    except: st.session_state.carrito_vendedor = p['items']
+                                    
+                                    st.session_state.input_cliente_nombre = p['cliente']
+                                    st.session_state.input_cliente_celular = p['celular']
+                                    st.session_state.cliente_retomado_aviso = p['cliente']
+                                    
+                                    gc = conectar_google()
+                                    ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                                    col_est = chr(65 + p['idx_est'])
+                                    updates = [{'range': f'{col_est}{f}', 'values': [["Cancelado (Retomado)"]]} for f in p['filas']]
+                                    ws.batch_update(updates)
+                                    
+                                    limpiar_cache_ventas()
+                                    st.session_state.v_rk += 1
+                                    st.success(f"✅ ¡Pedido recuperado! Ve a la sub-pestaña '🛍️ Venta Local'.")
+                                    st.rerun()
+                            st.markdown("---")
+                except Exception as e: st.error(f"Error: {e}")
             ui_retomar_pedidos(ventas_data_global)
     idx += 1
 
 # =======================================================
-# PESTAÑA 2: CAJA Y COBRO (SEPARADO EN LOCALES Y WEB + RETOMAR)
+# PESTAÑA 2: CAJA Y COBRO (SEPARADO EN LOCALES Y WEB)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -716,7 +750,71 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 3: ESTADO DE LOS PEDIDOS WEB
+# PESTAÑA 3: CUENTAS A COBRAR (AL LADO DE CAJA)
+# =======================================================
+if st.session_state.rol_logueado in ["Admin", "Cajero"]:
+    with tabs[idx]:
+        st.write("### 💳 Cuentas A Cobrar (Saldos Pendientes)")
+        try:
+            todas_o = agrupar_pedidos(ventas_data_global)
+            fiados_activos = [o for o in todas_o if "fiado" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['pago'].lower() or "cuenta" in o['estado'].lower()]
+            
+            clientes_fiado = {}
+            for f_ord in fiados_activos:
+                cli = f_ord['cliente']
+                if cli not in clientes_fiado: clientes_fiado[cli] = {"total": 0.0, "celular": f_ord['celular'], "pedidos": []}
+                if "cancelado" not in f_ord['estado'].lower():
+                    clientes_fiado[cli]["total"] += f_ord['total']
+                    clientes_fiado[cli]["pedidos"].append(f_ord)
+                    
+            if not clientes_fiado:
+                st.info("ℹ️ No hay clientes con saldos pendientes a cuenta.")
+            else:
+                tabla_fiados = []
+                for c_name, c_info in clientes_fiado.items():
+                    if c_info["total"] > 0:
+                        tabla_fiados.append({
+                            "Cliente": c_name,
+                            "Celular": c_info["celular"],
+                            "Deuda Total": f"${c_info['total']:,.1f}",
+                            "Cant. Pedidos": len(c_info["pedidos"])
+                        })
+                st.dataframe(pd.DataFrame(tabla_fiados), use_container_width=True)
+                
+                st.divider()
+                st.write("#### Gestionar Cuenta de Cliente:")
+                cliente_elegido = st.selectbox("Seleccionar cliente:", ["Seleccionar..."] + list(clientes_fiado.keys()), key="sel_cli_cta")
+                
+                if cliente_elegido != "Seleccionar...":
+                    info_c = clientes_fiado[cliente_elegido]
+                    st.write(f"👤 **{cliente_elegido}** | Deuda Total: **${info_c['total']:,.1f}**")
+                    
+                    msg_rec = f"👋 Hola {cliente_elegido}, desde *{nombre_empresa}* te recordamos que tu saldo pendiente a cuenta es de *${info_c['total']:,.1f}*. ¡Muchas gracias!"
+                    st.link_button("📲 Enviar Recordatorio de Deuda (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_rec)}")
+                    
+                    pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=info_c["total"], step=100.0, key="pago_parc_input")
+                    if st.button("💵 Registrar Pago / Saldar Cuenta", type="primary"):
+                        nuevo_saldo = info_c["total"] - pago_parcial
+                        gc = conectar_google()
+                        ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                        
+                        if nuevo_saldo <= 0:
+                            msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu deuda a cuenta ha sido saldada por completo! Muchas gracias."
+                            for pd in info_c["pedidos"]:
+                                col_e = chr(65 + pd['idx_est'])
+                                ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Cobrado"]]} for f in pd['filas']])
+                        else:
+                            msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente a cuenta de ${nuevo_saldo:,.1f}."
+                        
+                        limpiar_cache_ventas()
+                        st.success("✅ ¡Pago registrado!")
+                        st.link_button("📲 Enviar WhatsApp de Confirmación", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}", type="primary")
+                        st.rerun()
+        except Exception as e: st.error(f"Error: {e}")
+    idx += 1
+
+# =======================================================
+# PESTAÑA 4: ESTADO DE LOS PEDIDOS WEB
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -739,7 +837,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 4: ENTREGAS A DOMICILIO (LOGÍSTICA PURA)
+# PESTAÑA 5: ENTREGAS A DOMICILIO (LOGÍSTICA PURA)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -785,77 +883,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 5: CUENTAS A CUENTA (FIADOS UNIFICADOS)
-# =======================================================
-if st.session_state.rol_logueado in ["Admin", "Cajero"]:
-    with tabs[idx]:
-        st.write("### 💳 Cuentas 'A Cuenta' (Saldos Pendientes)")
-        try:
-            todas_o = agrupar_pedidos(ventas_data_global)
-            fiados_activos = [o for o in todas_o if "fiado" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['pago'].lower() or "cuenta" in o['estado'].lower()]
-            
-            clientes_fiado = {}
-            for f_ord in fiados_activos:
-                cli = f_ord['cliente']
-                if cli not in clientes_fiado: clientes_fiado[cli] = {"total": 0.0, "celular": f_ord['celular'], "pedidos": []}
-                if "cancelado" not in f_ord['estado'].lower():
-                    clientes_fiado[cli]["total"] += f_ord['total']
-                    clientes_fiado[cli]["pedidos"].append(f_ord)
-                    
-            if not clientes_fiado:
-                st.info("ℹ️ No hay clientes con saldos pendientes 'a cuenta'.")
-            else:
-                tabla_fiados = []
-                for c_name, c_info in clientes_fiado.items():
-                    if c_info["total"] > 0:
-                        tabla_fiados.append({
-                            "Cliente": c_name,
-                            "Celular": c_info["celular"],
-                            "Deuda Total": f"${c_info['total']:,.1f}",
-                            "Cant. Pedidos": len(c_info["pedidos"])
-                        })
-                st.dataframe(pd.DataFrame(tabla_fiados), use_container_width=True)
-                
-                st.divider()
-                st.write("#### Gestionar Cuenta de Cliente:")
-                cliente_elegido = st.selectbox("Seleccionar cliente:", ["Seleccionar..."] + list(clientes_fiado.keys()), key="sel_cli_cta")
-                
-                if cliente_elegido != "Seleccionar...":
-                    info_c = clientes_fiado[cliente_elegido]
-                    st.write(f"👤 **{cliente_elegido}** | Deuda Total: **${info_c['total']:,.1f}**")
-                    
-                    msg_rec = f"👋 Hola {cliente_elegido}, desde *{nombre_empresa}* te recordamos que tu saldo pendiente *a cuenta* es de *${info_c['total']:,.1f}*. ¡Muchas gracias!"
-                    st.link_button("📲 Enviar Recordatorio de Deuda (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_rec)}")
-                    
-                    pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=info_c["total"], step=100.0, key="pago_parc_input")
-                    if st.button("💵 Registrar Pago / Saldar Cuenta", type="primary"):
-                        nuevo_saldo = info_c["total"] - pago_parcial
-                        gc = conectar_google()
-                        ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
-                        
-                        if nuevo_saldo <= 0:
-                            msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu deuda *a cuenta* ha sido saldada por completo! Muchas gracias."
-                            for pd in info_c["pedidos"]:
-                                col_e = chr(65 + pd['idx_est'])
-                                ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Cobrado"]]} for f in pd['filas']])
-                        else:
-                            msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente *a cuenta* de ${nuevo_saldo:,.1f}."
-                        
-                        limpiar_cache_ventas()
-                        st.success("✅ ¡Pago registrado!")
-                        st.link_button("📲 Enviar WhatsApp de Confirmación", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}", type="primary")
-                        st.rerun()
-        except Exception as e: st.error(f"Error: {e}")
-    idx += 1
-
-# =======================================================
 # PESTAÑA 6: PANEL ADMIN (INCLUYE ARQUEO DE CAJA)
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
         st.write("### 📊 Panel Admin y Arqueo de Caja")
         
-        # --- ARQUEO DE CAJA EN PANEL ADMIN ---
         with st.expander("🔒 Arqueo y Auditoría de Caja (Efectivo Inicial y Final)"):
             ef_inicial = st.number_input("Efectivo Inicial en Caja (Fondo de cambio $):", min_value=0.0, step=100.0, value=st.session_state.get('ef_inicial', 0.0))
             st.session_state.ef_inicial = ef_inicial
