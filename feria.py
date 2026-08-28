@@ -79,7 +79,7 @@ def limpiar_y_formatear_celular(celular_ingresado):
     return num
 
 def get_estado_col_index(row):
-    kw = ["caja", "web", "entregado", "cancelado", "cobrado", "fiado", "pendiente"]
+    kw = ["caja", "web", "entregado", "cancelado", "cobrado", "fiado", "pendiente", "cuenta"]
     if len(row) > 10 and any(k in str(row[10]).lower() for k in kw): return 10
     if len(row) > 9 and any(k in str(row[9]).lower() for k in kw): return 9
     return 9
@@ -198,7 +198,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, medidas_planas
 
 # ==========================================
-# 3. MODO TIENDA PÚBLICA (WIZARD CON PASOS)
+# 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS)
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -246,7 +246,6 @@ if "feria" in query_params:
 
             elif st.session_state.web_step == 2:
                 st.subheader("2️⃣ Elegir Productos")
-                
                 prod_buscado = st.selectbox("Seleccionar producto del catálogo:", ["Seleccionar..."] + productos)
                 if prod_buscado != "Seleccionar...":
                     medida_p = medidas.get(prod_buscado, "kg")
@@ -302,7 +301,6 @@ if "feria" in query_params:
 
             elif st.session_state.web_step == 3:
                 st.subheader("3️⃣ Revisión de tu Pedido")
-                
                 tot_web = sum(i['subtotal'] for i in st.session_state.carrito_web)
                 st.markdown(f"**Cliente:** {st.session_state.cli_web_nombre.upper()}")
                 st.markdown(f"**Dirección:** {st.session_state.cli_web_dir}")
@@ -453,7 +451,7 @@ celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_cont
 st.title(f"🏢 {nombre_empresa}")
 
 # ==========================================
-# 5. PESTAÑAS Y ROLES
+# 5. PESTAÑAS Y ROLES ORGANIZADOS
 # ==========================================
 tabs_nombres = []
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]: 
@@ -463,7 +461,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     tabs_nombres.append("💰 Caja y Cobro")
     tabs_nombres.append("🌐 Estado Pedidos Web")
     tabs_nombres.append("🛵 Entregas a Domicilio")
-    tabs_nombres.append("💳 Control de Fiados")
+    tabs_nombres.append("💳 Cuentas A Cuenta")
 if st.session_state.rol_logueado == "Admin": 
     tabs_nombres.append("📊 Panel Admin")
     tabs_nombres.append("📈 Reportes Pro")
@@ -664,10 +662,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                             filas_nuevas = []
                             json_str = json.dumps(nuevos_i)
                             for ni in nuevos_i:
-                                filas_nuevas.append([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, p_sel["cliente"], ni['producto'], ni['cantidad'], ni['subtotal'], p_sel["celular"], "Pendiente Pago", "Web - En Caja", p_sel["direccion"], ni['ahorro'], json_str])
+                                filas_nuevas.append([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, p_sel["cliente"], ni['producto'], ni['cantidad'], ni['subtotal'], p_sel["celular"], "Envío Cuenta", "Web - En Caja", p_sel["direccion"], ni['ahorro'], json_str])
                             ws.append_rows(filas_nuevas)
                             limpiar_cache_ventas()
-                            st.success("✅ ¡Ajustado y enviado a caja!")
+                            st.success("✅ ¡Ajustado y enviado a caja web!")
                             st.rerun()
             except Exception as e: st.error(f"Error: {e}")
     idx += 1
@@ -681,44 +679,82 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 3: CAJA Y COBRO
+# PESTAÑA 3: CAJA Y COBRO (SEPARADO EN LOCALES Y WEB)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
-        st.write("### 💳 Caja y Cobro General")
-        try:
-            pedidos_caja = agrupar_pedidos(ventas_data_global, ["En Caja", "Web - En Caja"])
-            if not pedidos_caja:
-                st.info("No hay pedidos en caja.")
-            else:
-                sel_cj = st.selectbox("Seleccionar pedido para cobrar:", ["Seleccionar..."] + [f"{p['fecha']} | {p['cliente']} (${p['total']}) (ID {p['filas'][0]})" for p in pedidos_caja])
-                if sel_cj != "Seleccionar...":
-                    id_cj = int(sel_cj.split("(ID ")[1].replace(")", ""))
-                    p_cj = next(x for x in pedidos_caja if x['filas'][0] == id_cj)
-                    
-                    st.write(f"👤 **Cliente:** {p_cj['cliente']} | **Total:** ${p_cj['total']:,.1f}")
-                    pago_sel = st.selectbox("Forma de pago:", ["Efectivo", "Tarjeta", "MercadoPago", "FIADO"], key="c_pago_sel")
-                    
-                    if st.button("💵 Cerrar Cobro", type="primary"):
-                        gc = conectar_google()
-                        ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
-                        col_p = chr(65 + p_cj['idx_pago'])
-                        col_e = chr(65 + p_cj['idx_est'])
+        st.write("### 💳 Módulo de Caja y Cobro")
+        sub_caja_1, sub_caja_2 = st.tabs(["🏪 Ventas Locales en Caja", "🌐 Pedidos Web (Envío de Cuenta)"])
+        
+        # --- SUB-PESTAÑA 1: LOCALES ---
+        with sub_caja_1:
+            try:
+                pedidos_local = agrupar_pedidos(ventas_data_global, ["En Caja"])
+                if not pedidos_local:
+                    st.info("No hay ventas locales en caja.")
+                else:
+                    sel_loc = st.selectbox("Seleccionar venta local:", ["Seleccionar..."] + [f"{p['fecha']} | {p['cliente']} (${p['total']}) (ID {p['filas'][0]})" for p in pedidos_local], key="sel_loc_box")
+                    if sel_loc != "Seleccionar...":
+                        id_l = int(sel_loc.split("(ID ")[1].replace(")", ""))
+                        pl = next(x for x in pedidos_local if x['filas'][0] == id_l)
                         
-                        est_f = "Fiado Pendiente" if pago_sel == "FIADO" else "Cobrado"
-                        if "Web" in p_cj['estado']: est_f = "Web - " + est_f
+                        st.write(f"👤 **Cliente:** {pl['cliente']} | **Total:** ${pl['total']:,.1f}")
+                        st.write(f"🛍️ **Detalle:** {pl['detalle']}")
+                        pago_l = st.selectbox("Forma de pago:", ["Efectivo", "Tarjeta", "MercadoPago", "A Cuenta"], key="p_loc")
                         
-                        upd = []
-                        for f in p_cj['filas']:
-                            upd.append({'range': f'{col_p}{f}', 'values': [[pago_sel]]})
-                            upd.append({'range': f'{col_e}{f}', 'values': [[est_f]]})
-                        ws.batch_update(upd)
-                        limpiar_cache_ventas()
+                        col_bl1, col_bl2 = st.columns(2)
+                        with col_bl1:
+                            if st.button("💵 Cerrar Cobro Local", type="primary", use_container_width=True):
+                                gc = conectar_google()
+                                ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                                col_p = chr(65 + pl['idx_pago'])
+                                col_e = chr(65 + pl['idx_est'])
+                                est_f = "Fiado Pendiente" if pago_l == "A Cuenta" else "Cobrado"
+                                
+                                upd = []
+                                for f in pl['filas']:
+                                    upd.append({'range': f'{col_p}{f}', 'values': [[pago_l]]})
+                                    upd.append({'range': f'{col_e}{f}', 'values': [[est_f]]})
+                                ws.batch_update(upd)
+                                limpiar_cache_ventas()
+                                
+                                msg = f"👋 Hola {pl['cliente']}, registramos tu pago de ${pl['total']:,.1f} ({pago_l}). ¡Gracias!"
+                                st.success("✅ ¡Cobro registrado!")
+                                st.link_button("📲 Enviar WhatsApp", f"https://wa.me/{limpiar_y_formatear_celular(pl['celular'])}?text={urllib.parse.quote(msg)}", type="primary")
+                        with col_bl2:
+                            if st.button("🔄 Retomar para Editar", use_container_width=True):
+                                gc = conectar_google()
+                                ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                                col_e = chr(65 + pl['idx_est'])
+                                ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Cancelado (Retomado)"]]} for f in pl['filas']])
+                                limpiar_cache_ventas()
+                                st.session_state.carrito_vendedor = pl['items']
+                                st.session_state.input_cliente_nombre = pl['cliente']
+                                st.session_state.input_cliente_celular = pl['celular']
+                                st.session_state.cliente_retomado_aviso = pl['cliente']
+                                st.success("✅ Pedido devuelto a 'Tomar Pedido'.")
+                                st.rerun()
+            except Exception as e: st.error(f"Error: {e}")
+
+        # --- SUB-PESTAÑA 2: WEB (ENVÍO DE CUENTA) ---
+        with sub_caja_2:
+            try:
+                pedidos_web_caja = agrupar_pedidos(ventas_data_global, ["Web - En Caja"])
+                if not pedidos_web_caja:
+                    st.info("No hay pedidos web armados esperando en caja.")
+                else:
+                    sel_w = st.selectbox("Seleccionar pedido web armado:", ["Seleccionar..."] + [f"{p['fecha']} | {p['cliente']} (${p['total']}) (ID {p['filas'][0]})" for p in pedidos_web_caja], key="sel_web_box")
+                    if sel_w != "Seleccionar...":
+                        id_w = int(sel_w.split("(ID ")[1].replace(")", ""))
+                        pw = next(x for x in pedidos_web_caja if x['filas'][0] == id_w)
                         
-                        msg = f"👋 Hola {p_cj['cliente']}, registramos tu pago de ${p_cj['total']:,.1f} ({pago_sel}). ¡Gracias!"
-                        st.success("✅ ¡Cobro registrado con éxito!")
-                        st.link_button("📲 Enviar WhatsApp", f"https://wa.me/{limpiar_y_formatear_celular(p_cj['celular'])}?text={urllib.parse.quote(msg)}", type="primary")
-        except Exception as e: st.error(f"Error: {e}")
+                        st.write(f"👤 **Cliente:** {pw['cliente']} | 📍 **Dir:** {pw['direccion']} | **Total Est.:** ${pw['total']:,.1f}")
+                        st.write(f"📦 **Detalle:** {pw['detalle']}")
+                        
+                        # Mensaje de envío de cuenta
+                        msg_cuenta = f"👋 Hola {pw['cliente']}, tu pedido de *{nombre_empresa}* ya está listo y pesado. El total de tu cuenta es *${pw['total']:,.1f}*. ¡Vamos en camino a entregártelo! 💚"
+                        st.link_button("📲 Enviar Cuenta del Pedido por WhatsApp", f"https://wa.me/{limpiar_y_formatear_celular(pw['celular'])}?text={urllib.parse.quote(msg_cuenta)}", type="primary")
+            except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
 # =======================================================
@@ -728,16 +764,24 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 🌐 Estado de los Pedidos Web")
         try:
-            p_web = agrupar_pedidos(ventas_data_global, ["Web - Pendiente", "Web - En Caja"])
+            p_web = agrupar_pedidos(ventas_data_global, ["Web - Pendiente", "Web - En Caja", "Web - Cobrado", "Web - Fiado Pendiente"])
             if not p_web: st.info("No hay pedidos web activos.")
             else:
+                tabla_web_data = []
                 for pw in p_web:
-                    st.write(f"• **{pw['cliente']}** | Estado: `{pw['estado']}` | Monto: ${pw['total']:,.1f} | Dir: {pw['direccion']}")
+                    tabla_web_data.append({
+                        "Fecha": pw['fecha'],
+                        "Cliente": pw['cliente'],
+                        "Estado": pw['estado'],
+                        "Monto": f"${pw['total']:,.1f}",
+                        "Dirección": pw['direccion']
+                    })
+                st.dataframe(pd.DataFrame(tabla_web_data), use_container_width=True)
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
 # =======================================================
-# PESTAÑA 5: ENTREGAS A DOMICILIO (LOGÍSTICA)
+# PESTAÑA 5: ENTREGAS A DOMICILIO (LOGÍSTICA PURA)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -748,32 +792,45 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             
             if not entregas: st.info("No hay entregas pendientes.")
             else:
+                tabla_ent = []
                 for ent in entregas:
-                    st.write(f"🏠 **{ent['cliente']}** - {ent['direccion']} | Estado: `{ent['estado']}`")
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if st.button("🛵 Marcar Entregado", key=f"ent_ok_{ent['filas'][0]}"):
+                    tabla_ent.append({
+                        "Cliente": ent['cliente'],
+                        "Dirección": ent['direccion'],
+                        "Estado Actual": ent['estado'],
+                        "Monto": f"${ent['total']:,.1f}"
+                    })
+                st.dataframe(pd.DataFrame(tabla_ent), use_container_width=True)
+                
+                st.markdown("---")
+                st.write("#### Acciones de Entrega:")
+                sel_ent = st.selectbox("Seleccionar entrega:", ["Seleccionar..."] + [f"{e['cliente']} - {e['direccion']} (ID {e['filas'][0]})" for e in entregas], key="sel_ent_box")
+                if sel_ent != "Seleccionar...":
+                    id_e = int(sel_ent.split("(ID ")[1].replace(")", ""))
+                    ent_sel = next(x for x in entregas if x['filas'][0] == id_e)
+                    
+                    c_e1, c_e2 = st.columns(2)
+                    with c_e1:
+                        if st.button("🛵 Marcar como Entregado", type="primary"):
                             gc = conectar_google()
                             ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
-                            col_e = chr(65 + ent['idx_est'])
-                            ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Entregado"]]} for f in ent['filas']])
+                            col_e = chr(65 + ent_sel['idx_est'])
+                            ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Entregado"]]} for f in ent_sel["filas"]])
                             limpiar_cache_ventas()
+                            st.success("✅ Marcado como Entregado.")
                             st.rerun()
-                    with c2:
-                        # Corregido el problema de sintaxis con f-string y comillas
-                        cli_nombre = ent['cliente']
-                        link_wsp = f"https://wa.me/{limpiar_y_formatear_celular(ent['celular'])}?text={urllib.parse.quote('Hola ' + cli_nombre + '. Tu pedido va en camino a tu domicilio.')}"
+                    with c_e2:
+                        link_wsp = f"https://wa.me/{limpiar_y_formatear_celular(ent_sel['celular'])}?text={urllib.parse.quote('Hola ' + ent_sel['cliente'] + '. Tu pedido va en camino a tu domicilio.')}"
                         st.link_button("📲 Avisar 'Va en Camino'", link_wsp)
-                    st.markdown("---")
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
 # =======================================================
-# PESTAÑA 6: CONTROL DE FIADOS (CUENTAS CORRIENTES)
+# PESTAÑA 6: CUENTAS A CUENTA (FIADOS UNIFICADOS)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
-        st.write("### 💳 Control de Fiados y Cuentas Corrientes")
+        st.write("### 💳 Cuentas 'A Cuenta' (Saldos Pendientes)")
         try:
             todas_o = agrupar_pedidos(ventas_data_global)
             fiados_activos = [o for o in todas_o if "fiado" in o['pago'].lower() or "fiado" in o['estado'].lower()]
@@ -781,41 +838,57 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             clientes_fiado = {}
             for f_ord in fiados_activos:
                 cli = f_ord['cliente']
-                if cli not in clientes_fiado: clientes_fiado[cli] = {"total": 0.0, "pedidos": []}
+                if cli not in clientes_fiado: clientes_fiado[cli] = {"total": 0.0, "celular": f_ord['celular'], "pedidos": []}
                 if "cancelado" not in f_ord['estado'].lower():
                     clientes_fiado[cli]["total"] += f_ord['total']
                     clientes_fiado[cli]["pedidos"].append(f_ord)
                     
             if not clientes_fiado:
-                st.info("ℹ️ No hay clientes con cuentas fiadas pendientes.")
+                st.info("ℹ️ No hay clientes con saldos pendientes 'a cuenta'.")
             else:
+                tabla_fiados = []
                 for c_name, c_info in clientes_fiado.items():
                     if c_info["total"] > 0:
-                        with st.expander(f"👤 {c_name} — Deuda Total: ${c_info['total']:,.1f}"):
-                            for p_det in c_info["pedidos"]:
-                                origen_t = "Web" if "Web" in p_det['estado'] else "Local"
-                                st.write(f"• [{origen_t}] {p_det['fecha']} | Detalle: {p_det['detalle']} | **${p_det['total']:,.1f}**")
-                            
-                            pago_parcial = st.number_input(f"Monto que paga {c_name} ($):", min_value=0.0, max_value=c_info["total"], step=100.0, key=f"pago_f_{c_name}")
-                            if st.button(f"💵 Registrar Pago / Abono de {c_name}", key=f"btn_pf_{c_name}", type="primary"):
-                                nuevo_saldo = c_info["total"] - pago_parcial
-                                cel_cliente = c_info["pedidos"][0]['celular']
-                                
-                                if nuevo_saldo <= 0:
-                                    msg_wsp = f"👋 Hola {c_name}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu deuda ha sido saldada por completo! Muchas gracias."
-                                    gc = conectar_google()
-                                    ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
-                                    for pd in c_info["pedidos"]:
-                                        col_e = chr(65 + pd['idx_est'])
-                                        ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Cobrado"]]} for f in pd['filas']])
-                                else:
-                                    msg_wsp = f"👋 Hola {c_name}, registramos tu pago/abono de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente de ${nuevo_saldo:,.1f}."
-                                
-                                limpiar_cache_ventas()
-                                st.success("✅ ¡Pago registrado con éxito!")
-                                st.link_button("📲 Enviar WhatsApp del Estado de Cuenta", f"https://wa.me/{limpiar_y_formatear_celular(cel_cliente)}?text={urllib.parse.quote(msg_wsp)}", type="primary")
-                                st.rerun()
-        except Exception as e: st.error(f"Error cargando fiados: {e}")
+                        tabla_fiados.append({
+                            "Cliente": c_name,
+                            "Celular": c_info["celular"],
+                            "Deuda Total": f"${c_info['total']:,.1f}",
+                            "Cant. Pedidos": len(c_info["pedidos"])
+                        })
+                st.dataframe(pd.DataFrame(tabla_fiados), use_container_width=True)
+                
+                st.divider()
+                st.write("#### Gestionar Cuenta de Cliente:")
+                cliente_elegido = st.selectbox("Seleccionar cliente:", ["Seleccionar..."] + list(clientes_fiado.keys()), key="sel_cli_cta")
+                
+                if cliente_elegido != "Seleccionar...":
+                    info_c = clientes_fiado[cliente_elegido]
+                    st.write(f"👤 **{cliente_elegido}** | Deuda Total: **${info_c['total']:,.1f}**")
+                    
+                    # Botón para mandar recordatorio de deuda
+                    msg_rec = f"👋 Hola {cliente_elegido}, desde *{nombre_empresa}* te recordamos que tu saldo pendiente *a cuenta* es de *${info_c['total']:,.1f}*. ¡Muchas gracias!"
+                    st.link_button("📲 Enviar Recordatorio de Deuda (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_rec)}")
+                    
+                    pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=info_c["total"], step=100.0, key="pago_parc_input")
+                    if st.button("💵 Registrar Pago / Salidar Cuenta", type="primary"):
+                        nuevo_saldo = info_c["total"] - pago_parcial
+                        gc = conectar_google()
+                        ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                        
+                        if nuevo_saldo <= 0:
+                            msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu deuda *a cuenta* ha sido saldada por completo! Muchas gracias."
+                            for pd in info_c["pedidos"]:
+                                col_e = chr(65 + pd['idx_est'])
+                                ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Cobrado"]]} for f in pd['filas']])
+                        else:
+                            msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente *a cuenta* de ${nuevo_saldo:,.1f}."
+                            # Marcar parcialmente o dejar pendiente
+                        
+                        limpiar_cache_ventas()
+                        st.success("✅ ¡Pago registrado!")
+                        st.link_button("📲 Enviar WhatsApp de Confirmación", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}", type="primary")
+                        st.rerun()
+        except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
 # =======================================================
@@ -837,5 +910,5 @@ if st.session_state.rol_logueado == "Admin":
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
         st.write("### 📈 Reportes Pro")
-        st.info("Módulo de analítica avanzada disponible.")
+        st.info("Módulo analítico disponible.")
     idx += 1
