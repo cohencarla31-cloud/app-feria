@@ -192,14 +192,16 @@ if "feria" in query_params:
     if link_excel and link_excel != "SUSPENDIDO":
         try:
             productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config = cargar_datos_feria(link_excel)
-            nombre_feria = config.get("nombre_empresa", "Nuestra Feria")
+            nombre_feria = config.get("nombre_empresa", config.get("nombre", config.get("frutas y verduras il nonno", "Nuestra Feria")))
             celular_feriante = config.get("celular_feriante", config.get("celular_contacto", "59893343092"))
-            ofertas_dia = config.get("ofertas", config.get("bienvenida", ""))
+            
+            # Buscar bienvenida o ofertas independientemente de cómo se llame la clave en el excel
+            bienvenida_dia = config.get("bienvenida", config.get("ofertas", config.get("banner", "")))
             
             st.title(f"🛒 {nombre_feria}")
             
-            if ofertas_dia:
-                st.info(f"🔥 **OFERTAS Y NOVEDADES DE HOY:**\n\n{ofertas_dia}")
+            if bienvenida_dia:
+                st.info(f"🔥 **OFERTAS Y NOVEDADES DE HOY:**\n\n{bienvenida_dia}")
             
             st.markdown("Elige tus productos, completa tus datos y envía tu pedido directo a la feria.")
             st.divider()
@@ -354,7 +356,7 @@ with st.sidebar:
         st.rerun()
 
 PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG = cargar_datos_feria(st.session_state.link_feria)
-nombre_empresa = CONFIG.get("nombre_empresa", "La Feria")
+nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre", "La Feria"))
 celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_contacto", "59893343092"))
 
 st.title(f"🏢 {nombre_empresa}")
