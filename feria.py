@@ -11,13 +11,18 @@ import json
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
-# --- TRUCO PARA OCULTAR EL MENÚ DE STREAMLIT, EL HEADER Y EL FOOTER ---
+# --- TRUCO "NUCLEAR" PARA OCULTAR EL MENÚ Y EL BARQUITO DE STREAMLIT CLOUD ---
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
             header {visibility: hidden;}
-            footer {visibility: hidden;}
+            footer {visibility: hidden !important; display: none !important;}
             .stDeployButton {display:none;}
+            [data-testid="stHeader"] {display: none;}
+            [data-testid="stFooter"] {display: none !important;}
+            /* Ocultar específicamente el barquito rojo y el avatar de perfil */
+            div[class^="viewerBadge"] {display: none !important;}
+            #viewerBadge {display: none !important;}
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
