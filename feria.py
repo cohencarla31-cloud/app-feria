@@ -435,6 +435,9 @@ if st.session_state.usuario_logueado is None:
     st.stop()
 
 ventas_data_global = obtener_ventas(st.session_state.link_feria)
+PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG, MEDIDAS_PLANAS = cargar_datos_feria(st.session_state.link_feria)
+nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre", "La Feria"))
+celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_contacto", "59893343092"))
 
 with st.sidebar:
     st.success(f"Hola, **{st.session_state.usuario_logueado}**\n\nRol: {st.session_state.rol_logueado}")
@@ -443,10 +446,6 @@ with st.sidebar:
         st.session_state.carrito_vendedor = []
         st.session_state.cliente_retomado_aviso = ""
         st.rerun()
-
-PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG, MEDIDAS_PLANAS = cargar_datos_feria(st.session_state.link_feria)
-nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre", "La Feria"))
-celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_contacto", "59893343092"))
 
 st.title(f"🏢 {nombre_empresa}")
 
@@ -484,8 +483,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
         # --- SUB-TAB 1: VENTA LOCAL ---
         with sub_tomar_1:
             st.markdown("### 👤 Paso 1: Datos del Cliente")
-            def actualizar_cliente_seleccionado():
-                sel = st.session_state.get(f"sel_cli_{st.session_state.v_rk}", "Escribir nuevo...")
+            
+            lista_clientes_base = sorted(list(CLIENTES_DICT.keys())) if CLIENTES_DICT else []
+            opciones_cli = ["Escribir nuevo..."] + lista_clientes_base
+            
+            def callback_cliente():
+                sel = st.session_state.get("select_cliente_local", "Escribir nuevo...")
                 if sel != "Escribir nuevo...":
                     st.session_state.input_cliente_nombre = sel
                     st.session_state.input_cliente_celular = CLIENTES_DICT.get(sel, "")
@@ -493,16 +496,16 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     st.session_state.input_cliente_nombre = ""
                     st.session_state.input_cliente_celular = ""
 
-            lista_clientes_base = sorted(list(CLIENTES_DICT.keys())) if CLIENTES_DICT else []
-            opciones_cli = ["Escribir nuevo..."] + lista_clientes_base
             index_def = 0
             if st.session_state.input_cliente_nombre in lista_clientes_base:
                 index_def = opciones_cli.index(st.session_state.input_cliente_nombre)
                 
-            st.selectbox("Seleccionar Cliente:", opciones_cli, index=index_def, key=f"sel_cli_{st.session_state.v_rk}", on_change=actualizar_cliente_seleccionado)
+            st.selectbox("Seleccionar Cliente Frecuente:", opciones_cli, index=index_def, key="select_cliente_local", on_change=callback_cliente)
             
-            cliente_vendedor = st.text_input("Nombre y Apellido:", value=st.session_state.input_cliente_nombre, key=f"txt_cli_{st.session_state.v_rk}")
-            celular_vendedor = st.text_input("Celular:", value=st.session_state.input_cliente_celular, placeholder="099...", key=f"txt_cel_{st.session_state.v_rk}")
+            # Inputs con valores sincronizados del session_state
+            cliente_vendedor = st.text_input("Nombre y Apellido:", value=st.session_state.input_cliente_nombre, key="txt_cli_vendedor")
+            celular_vendedor = st.text_input("Celular:", value=st.session_state.input_cliente_celular, placeholder="099...", key="txt_cel_vendedor")
+            
             st.session_state.input_cliente_nombre = cliente_vendedor.strip().upper()
             st.session_state.input_cliente_celular = celular_vendedor
 
@@ -665,8 +668,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     ws.batch_update(updates)
                                     
                                     limpiar_cache_ventas()
-                                    st.session_state.v_rk += 1
-                                    st.success(f"✅ ¡Pedido recuperado! Ve a la sub-pestaña '🛍️ Venta Local'.")
+                                    
+                                    # Generar link de WhatsApp para notificar al cajero/feriante
+                                    num_cajero = limpiar_y_formatear_celular(celular_feriante_local)
+                                    if not num_cajero: num_cajero = "59893343092"
+                                    link_wsp_cajero = f"https://wa.me/{num_cajero}?text={urllib.parse.quote(f'🔄 *PEDIDO RETOMADO*\n👤 Cliente: {p[\"cliente\"]}\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}')}"
+                                    
+                                    st.success(f"✅ ¡Pedido de {p['cliente']} recuperado con éxito!")
+                                    st.link_button("📲 Enviar Aviso al Cajero por WhatsApp", link_wsp_cajero, type="primary")
                                     st.rerun()
                             st.markdown("---")
                 except Exception as e: st.error(f"Error: {e}")
@@ -755,6 +764,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 💳 Cuentas A Cobrar (Saldos Pendientes)")
+        
+        # Botón de Refresh explícito
+        col_ref1, col_ref2 = st.columns([1, 3])
+        with col_ref1:
+            if st.button("🔄 Refrescar Cuentas"):
+                limpiar_cache_ventas()
+                st.rerun()
+                
         try:
             todas_o = agrupar_pedidos(ventas_data_global)
             fiados_activos = [o for o in todas_o if "fiado" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['pago'].lower() or "cuenta" in o['estado'].lower()]
