@@ -174,7 +174,6 @@ def cargar_datos_feria(link):
         ws_cli = sh.worksheet("Clientes")
         for fila in ws_cli.get_all_values()[1:]:
             if len(fila) >= 1 and fila[0].strip() and fila[0].strip().lower() != "nombre":
-                # Guardar nombres en Mayúsculas ordenados
                 nombre_c = fila[0].strip().upper()
                 celular_c = fila[1].strip() if len(fila) > 1 else ""
                 clientes_dict[nombre_c] = celular_c
@@ -183,7 +182,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config
 
 # ==========================================
-# 3. MODO TIENDA PÚBLICA
+# 3. MODO TIENDA PÚBLICA (CON BANNER DE OFERTAS)
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -195,8 +194,14 @@ if "feria" in query_params:
             productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config = cargar_datos_feria(link_excel)
             nombre_feria = config.get("nombre_empresa", "Nuestra Feria")
             celular_feriante = config.get("celular_feriante", config.get("celular_contacto", "59893343092"))
+            ofertas_dia = config.get("ofertas", config.get("bienvenida", ""))
             
             st.title(f"🛒 {nombre_feria}")
+            
+            # --- BANNER DE BIENVENIDA Y OFERTAS DESDE EL EXCEL ---
+            if ofertas_dia:
+                st.info(f"🔥 **OFERTAS Y NOVEDADES DE HOY:**\n\n{ofertas_dia}")
+            
             st.markdown("Elige tus productos, completa tus datos y envía tu pedido directo a la feria.")
             st.divider()
             
@@ -262,7 +267,7 @@ if "feria" in query_params:
                         
                         try:
                             ws_cli = sh.worksheet("Clientes")
-                            nombres_existentes = [str(x).strip().upper() for x in ws_cli.col_values(1)[1:]]
+                            nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
                             if nombre_mayus not in nombres_existentes:
                                 ws_cli.append_row([nombre_mayus, celular_formateado, "Web"])
                         except: pass
@@ -385,7 +390,7 @@ def ui_retomar_pedidos(ventas_data):
                 col_r1, col_r2 = st.columns([3,1])
                 tipo_origen = "🌐 WEB" if "Web" in p['estado'] else "🏪 LOCAL"
                 
-                with col_r1: st.write(f"📦 **[{tipo_origen}] {p['cliente']}** - ${p['total']:,.1f} (Hora: {p['hora']})")
+                with col_r1: st.write(f"📦 **[{tipo_origen}] {p['cliente']}** - ${p['total']:,.1f} ({p['fecha']} - {p['hora']})")
                 with col_r2:
                     if st.button("Retomar", key=f"ret_panel_{p['filas'][0]}"):
                         try:
@@ -440,7 +445,6 @@ with tabs[idx]:
                 st.session_state.input_cliente_nombre = ""
                 st.session_state.input_cliente_celular = ""
 
-        # --- CLIENTES ORDENADOS ALFABÉTICAMENTE DE LA A A LA Z ---
         lista_clientes_base = sorted(list(CLIENTES_DICT.keys())) if CLIENTES_DICT else []
         opciones_cli = ["Escribir nuevo..."] + lista_clientes_base
         
@@ -449,7 +453,6 @@ with tabs[idx]:
         if current_cli in lista_clientes_base:
             index_def = opciones_cli.index(current_cli)
             
-        # st.selectbox actúa como autocompletable al empezar a tipear
         tipo_cli_sel = st.selectbox("Seleccionar Cliente (Frecuentes o Nuevo):", opciones_cli, index=index_def, key=f"sel_cli_{st.session_state.v_rk}", on_change=actualizar_cliente_seleccionado)
         
         if tipo_cli_sel == "Escribir nuevo...":
@@ -560,7 +563,7 @@ with tabs[idx]:
                     
                     try:
                         ws_cli = sh_feria.worksheet("Clientes")
-                        nombres_existentes = [str(x).strip().upper() for x in ws_cli.col_values(1)[1:]]
+                        nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
                         if cliente_final_mayus not in nombres_existentes:
                             ws_cli.append_row([cliente_final_mayus, celular_limpio, "Local"])
                     except: pass
@@ -599,7 +602,7 @@ with tabs[idx]:
             if not pedidos_web:
                 st.info("No hay pedidos web pendientes para armar.")
             else:
-                opciones_web = ["Seleccionar..."] + [f"{p['hora']} | {p['cliente']} - (ID {p['filas'][0]})" for p in pedidos_web]
+                opciones_web = ["Seleccionar..."] + [f"{p['fecha']} - {p['hora']} | {p['cliente']} (ID {p['filas'][0]})" for p in pedidos_web]
                 sel_web = st.selectbox("Selecciona el pedido a preparar:", opciones_web)
                 
                 if sel_web != "Seleccionar...":
@@ -607,7 +610,7 @@ with tabs[idx]:
                     pedido_sel = next(p for p in pedidos_web if p["filas"][0] == idx_selec)
                     
                     st.write(f"👤 **Cliente:** {pedido_sel['cliente']} | 📱 **Celular:** {pedido_sel['celular']}")
-                    st.write(f"📍 **Dirección:** {pedido_sel['direccion']}")
+                    st.write(f"📍 **Dirección:** {pedido_sel['direccion']} | 📅 **Fecha:** {pedido_sel['fecha']} {pedido_sel['hora']}")
                     st.divider()
                     
                     total_real_calculado, total_ahorro_web = 0.0, 0.0
@@ -782,7 +785,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 opciones_caja = ["Selecciona un pedido..."]
                 for p in pedidos_en_caja:
                     tipo_origen = "🌐 WEB" if "Web" in p['estado'] else f"🏪 LOCAL"
-                    opciones_caja.append(f"{p['hora']} | [{tipo_origen}] {p['cliente']} - ${p['total']:,.1f} (ID {p['filas'][0]})")
+                    opciones_caja.append(f"{p['fecha']} - {p['hora']} | [{tipo_origen}] {p['cliente']} - ${p['total']:,.1f} (ID {p['filas'][0]})")
                 
                 sel_caja = st.selectbox("🛒 Pedidos esperando para ser cobrados:", opciones_caja)
                 
@@ -897,12 +900,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             else:
                 for p in pedidos_web:
                     if p["estado"] == "Web - Pendiente":
-                        with st.expander(f"🔴 NUEVO: {p['cliente']} - Hora: {p['hora']}"):
+                        with st.expander(f"🔴 NUEVO: {p['cliente']} - {p['fecha']} ({p['hora'])"):
                             st.write(f"**Detalle original:** {p['detalle']}\n\n**Dirección:** {p['direccion']}\n\n**Celular:** {p['celular']}")
                             st.info("El vendedor debe armarlo y pesarlo en la pestaña 'Tomar Pedido'.")
                             st.link_button("📲 Reenviar 'Pedido Recibido'", f"https://wa.me/{limpiar_y_formatear_celular(p['celular'])}?text={urllib.parse.quote(f'Hola {p['cliente']} 🛒. ¡Recibimos tu pedido en {nombre_empresa}! A la brevedad será armado. ¡Gracias!')}")
                     else:
-                        with st.expander(f"🟡 ARMADO Y EN CAJA: {p['cliente']} - ${p['total']:,.1f}"):
+                        with st.expander(f"🟡 ARMADO Y EN CAJA: {p['cliente']} - ${p['total']:,.1f} ({p['fecha']})"):
                             st.write(f"**Detalle:** {p['detalle']}\n\n**Dirección:** {p['direccion']}")
                             st.info("Este pedido ya fue armado y está en la Caja esperando generar el ticket o el cobro.")
         except: st.error("Error leyendo pedidos web.")
@@ -936,7 +939,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             if entregas_pendientes:
                 for p in entregas_pendientes:
                     with st.container():
-                        st.write(f"🏠 **{p['cliente']}** - {p['direccion']}")
+                        st.write(f"🏠 **{p['cliente']}** - {p['direccion']} ({p['fecha']})")
                         st.write(f"*Detalle:* {p['detalle']} ({p['estado']}) - **Total: ${p['total']:,.1f}**")
                         
                         c_e1, c_e2, c_e3 = st.columns(3)
