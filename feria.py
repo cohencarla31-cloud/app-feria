@@ -7,11 +7,11 @@ from google.oauth2.service_account import Credentials
 import json
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL
+# 1. CONFIGURACIÓN INICIAL Y OCULTAMIENTO DE INTERFAZ
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
-# --- OCULTAR MENÚS Y MARCAS DE AGUA DE STREAMLIT ---
+# --- TRUCO PARA OCULTAR EL MENÚ DE STREAMLIT, EL HEADER Y EL FOOTER ---
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -1177,3 +1177,4 @@ if st.session_state.rol_logueado == "Admin":
                 
         except Exception as e:
             st.error(f"Error generando reportes pro: {e}")
+                    
