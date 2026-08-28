@@ -182,7 +182,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config
 
 # ==========================================
-# 3. MODO TIENDA PÚBLICA (CON BANNER DE OFERTAS)
+# 3. MODO TIENDA PÚBLICA
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -198,7 +198,6 @@ if "feria" in query_params:
             
             st.title(f"🛒 {nombre_feria}")
             
-            # --- BANNER DE BIENVENIDA Y OFERTAS DESDE EL EXCEL ---
             if ofertas_dia:
                 st.info(f"🔥 **OFERTAS Y NOVEDADES DE HOY:**\n\n{ofertas_dia}")
             
@@ -900,7 +899,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             else:
                 for p in pedidos_web:
                     if p["estado"] == "Web - Pendiente":
-                        with st.expander(f"🔴 NUEVO: {p['cliente']} - {p['fecha']} ({p['hora'])"):
+                        with st.expander(f"🔴 NUEVO: {p['cliente']} - {p['fecha']} ({p['hora']})"):
                             st.write(f"**Detalle original:** {p['detalle']}\n\n**Dirección:** {p['direccion']}\n\n**Celular:** {p['celular']}")
                             st.info("El vendedor debe armarlo y pesarlo en la pestaña 'Tomar Pedido'.")
                             st.link_button("📲 Reenviar 'Pedido Recibido'", f"https://wa.me/{limpiar_y_formatear_celular(p['celular'])}?text={urllib.parse.quote(f'Hola {p['cliente']} 🛒. ¡Recibimos tu pedido en {nombre_empresa}! A la brevedad será armado. ¡Gracias!')}")
@@ -1030,7 +1029,6 @@ if st.session_state.rol_logueado == "Admin":
             c2.metric("Recaudación Neta ($)", f"${total_recaudado:,.1f}")
             st.divider()
             
-            # --- TABLA 1: VENTAS LOCALES ---
             st.subheader("🏪 Resumen de Ventas Locales (Presenciales)")
             if ventas_locales:
                 df_locales = pd.DataFrame(ventas_locales)
@@ -1047,7 +1045,6 @@ if st.session_state.rol_logueado == "Admin":
 
             st.divider()
 
-            # --- TABLA 2: COMPRAS WEB ---
             st.subheader("🌐 Resumen de Compras Online (Web)")
             if ventas_web:
                 df_web = pd.DataFrame(ventas_web)
