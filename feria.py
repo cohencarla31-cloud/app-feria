@@ -607,7 +607,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     with c_g: gr = st.number_input("Gramos", value=float(g_in), step=50.0, key=f"w_g_{idx_w}_{idx_item}")
                                     p_real = kr + (gr / 1000.0)
                             
-                            pr_u = precios.get(it["producto"], precios.get(nombres_planos.get(it["producto"], it["producto"], 100)))
+                            pr_u = precios.get(it["producto"], precios.get(nombres_planos.get(it["producto"], it["producto"]), 100))
                             desc_u = descuentos.get(it["producto"], 0)
                             sub_r = p_real * (pr_u * (1 - desc_u/100))
                             tot_real += sub_r
