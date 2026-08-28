@@ -11,18 +11,19 @@ import json
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
-# --- TRUCO "NUCLEAR" PARA OCULTAR EL MENÚ Y EL BARQUITO DE STREAMLIT CLOUD ---
+# --- TRUCO CSS ACTUALIZADO PARA OCULTAR TODO EL HEADER Y FOOTER ---
 hide_streamlit_style = """
             <style>
-            #MainMenu {visibility: hidden;}
-            header {visibility: hidden;}
+            /* Ocultar cabecera superior completa (Avatar, Deploy, Menú) */
+            header {visibility: hidden !important; display: none !important;}
+            [data-testid="stHeader"] {display: none !important;}
+            /* Ocultar menú de herramientas (los 3 puntitos) */
+            [data-testid="stToolbar"] {display: none !important;}
+            /* Ocultar marca de agua inferior */
             footer {visibility: hidden !important; display: none !important;}
-            .stDeployButton {display:none;}
-            [data-testid="stHeader"] {display: none;}
-            [data-testid="stFooter"] {display: none !important;}
-            /* Ocultar específicamente el barquito rojo y el avatar de perfil */
-            div[class^="viewerBadge"] {display: none !important;}
-            #viewerBadge {display: none !important;}
+            /* Ocultar botones flotantes específicos de Streamlit */
+            .stAppDeployButton {display: none !important;}
+            .viewerBadge_container__1QSob {display: none !important;}
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
