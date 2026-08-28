@@ -53,18 +53,24 @@ def obtener_datos_cliente(codigo_empresa):
     return None
 
 def limpiar_y_formatear_celular(celular_ingresado):
+    # Deja solo los números, ignora + - espacios o paréntesis
     num = ''.join(filter(str.isdigit, str(celular_ingresado)))
     if not num: return ""
-    if str(celular_ingresado).strip().startswith("+"): return num
     
-    # Detección inteligente si es Argentina (ej. empieza con 9 o 11 y tiene longitud larga sin prefijo)
-    if len(num) >= 10 and not num.startswith("598") and not num.startswith("54"):
-        if num.startswith("9"): return f"54{num}"
-        else: return f"549{num}"
+    # Inteligencia para Argentina: Si tiene 10 dígitos (ej 1145... o 351...) se asume AR y se le pega el 549
+    if len(num) == 10 and not num.startswith("0") and not num.startswith("54"):
+        return f"549{num}"
     
+    # Si ya puso el 549 a mano pero no el +, lo dejamos como está
+    if num.startswith("549"):
+        return num
+        
+    # Inteligencia para Uruguay: Si tiene 8 o 9 dígitos (ej 099 o 99...)
     if len(num) <= 9:
         if num.startswith("0"): num = num[1:]
         return f"598{num}"
+        
+    # Por defecto, devuelve lo que armó el cliente filtrado de símbolos
     return num
 
 def get_estado_col_index(row):
@@ -211,7 +217,7 @@ if "feria" in query_params:
             with tab_web1:
                 st.subheader("👤 Ingresa tus datos de entrega")
                 st.session_state.cli_web_nombre = st.text_input("Nombre y Apellido:", value=st.session_state.get('cli_web_nombre', ''))
-                st.session_state.cli_web_celular = st.text_input("Celular (Ej: 099123456 o 11...):", value=st.session_state.get('cli_web_celular', ''), placeholder="099123456")
+                st.session_state.cli_web_celular = st.text_input("Celular (Si no es de Uruguay, incluye tu código de país. Ej: 54911...):", value=st.session_state.get('cli_web_celular', ''), placeholder="Ej: 099123456 o 54911...")
                 st.session_state.cli_web_dir = st.text_input("Dirección de Envío (Calle, Nro y Esquina):", value=st.session_state.get('cli_web_dir', ''))
                 st.session_state.cli_web_obs = st.text_area("Observaciones para el armado (Opcional):", value=st.session_state.get('cli_web_obs', ''))
             
@@ -267,6 +273,10 @@ if "feria" in query_params:
                     st.markdown("**Detalle de tu compra:**")
                     for it in items_resumen: st.markdown(it)
                     st.markdown(f"### Total Estimado: **${total_resumen:,.1f}**")
+                    
+                    # Cartel de advertencia de precio estimado
+                    st.warning("⚖️ **Nota importante:** El importe total es *estimado*. Puede variar un poco (más o menos) dependiendo del peso exacto de los productos en la balanza al momento de armarlo.")
+                    
                     st.markdown("---")
                     
                     if st.button("🚀 Enviar Pedido a la Feria Ahora", type="primary", use_container_width=True):
@@ -311,7 +321,7 @@ if "feria" in query_params:
                             
                             num_feriante_limpio = limpiar_y_formatear_celular(celular_feriante)
                             if not num_feriante_limpio: num_feriante_limpio = "59893343092"
-                            msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n👤 Cliente: {nombre_mayus}\n📍 Dirección: {direccion_c}\n💰 Total: ${total_resumen:,.1f}"
+                            msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n👤 Cliente: {nombre_mayus}\n📍 Dirección: {direccion_c}\n💰 Total Estimado: ${total_resumen:,.1f}"
                             st.link_button("📲 Enviar Aviso al Feriante por WhatsApp", f"https://wa.me/{num_feriante_limpio}?text={urllib.parse.quote(msg_feriante)}", type="primary", use_container_width=True)
                 else:
                     st.info("ℹ️ Aún no has seleccionado ningún producto en la pestaña '2️⃣ Armar Pedido'.")
