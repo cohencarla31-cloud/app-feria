@@ -56,6 +56,12 @@ def limpiar_y_formatear_celular(celular_ingresado):
     num = ''.join(filter(str.isdigit, str(celular_ingresado)))
     if not num: return ""
     if str(celular_ingresado).strip().startswith("+"): return num
+    
+    # Detección inteligente si es Argentina (ej. empieza con 9 o 11 y tiene longitud larga sin prefijo)
+    if len(num) >= 10 and not num.startswith("598") and not num.startswith("54"):
+        if num.startswith("9"): return f"54{num}"
+        else: return f"549{num}"
+    
     if len(num) <= 9:
         if num.startswith("0"): num = num[1:]
         return f"598{num}"
@@ -182,7 +188,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config
 
 # ==========================================
-# 3. MODO TIENDA PÚBLICA
+# 3. MODO TIENDA PÚBLICA (EN 3 PESTAÑAS)
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -198,82 +204,117 @@ if "feria" in query_params:
             
             st.title(f"🛒 {nombre_feria}")
             if bienvenida_dia: st.info(f"🔥 **OFERTAS Y NOVEDADES DE HOY:**\n\n{bienvenida_dia}")
-            st.markdown("Elige tus productos, completa tus datos y envía tu pedido directo a la feria.")
-            st.divider()
             
-            st.subheader("1️⃣ Tus Datos de Envío")
-            nombre_cliente = st.text_input("Nombre y Apellido:")
-            celular_cliente = st.text_input("Celular (Ej: 099123456 o +549...):", placeholder="099123456")
-            direccion_cliente = st.text_input("Dirección de Envío (Calle, Nro y Esquina):")
-            observaciones_cliente = st.text_area("Observaciones para el armado (Opcional):")
+            # --- 3 PESTAÑAS PARA EL CLIENTE ONLINE ---
+            tab_web1, tab_web2, tab_web3 = st.tabs(["1️⃣ Tus Datos", "2️⃣ Armar Pedido", "3️⃣ Enviar y WhatsApp"])
             
-            st.divider()
-            st.subheader("2️⃣ Armá tu Pedido")
+            with tab_web1:
+                st.subheader("👤 Ingresa tus datos de entrega")
+                st.session_state.cli_web_nombre = st.text_input("Nombre y Apellido:", value=st.session_state.get('cli_web_nombre', ''))
+                st.session_state.cli_web_celular = st.text_input("Celular (Ej: 099123456 o 11...):", value=st.session_state.get('cli_web_celular', ''), placeholder="099123456")
+                st.session_state.cli_web_dir = st.text_input("Dirección de Envío (Calle, Nro y Esquina):", value=st.session_state.get('cli_web_dir', ''))
+                st.session_state.cli_web_obs = st.text_area("Observaciones para el armado (Opcional):", value=st.session_state.get('cli_web_obs', ''))
             
-            cantidades_seleccionadas = {}
-            for prod_full in productos:
-                precio = precios.get(prod_full, 0)
-                descuento = descuentos.get(prod_full, 0)
-                medida_prod = medidas.get(prod_full, "kg")
+            with tab_web2:
+                st.subheader("🛍️ Selecciona tus productos")
+                cantidades_seleccionadas = {}
                 
-                precio_final = precio * (1 - (descuento / 100)) if descuento > 0 else precio
-                label_precio = f"${precio_final:,.1f} (¡{descuento}% OFF!)" if descuento > 0 else f"${precio:,.1f}"
-                
-                st.markdown(f"**{prod_full}** — *Precio:* {label_precio} *(Venta por {medida_prod})*")
-                
-                if medida_prod == "un":
-                    cantidades_seleccionadas[prod_full] = st.number_input(f"Cantidad (unidades)", min_value=0, step=1, key=f"wun_{prod_full}")
-                else:
-                    cantidades_seleccionadas[prod_full] = st.number_input(f"Cantidad (kg)", min_value=0.0, step=0.5, format="%.1f", key=f"wkg_{prod_full}")
-                st.markdown("---")
-            
-            if st.button("🚀 Enviar Pedido a la Feria", type="primary", use_container_width=True):
-                if not nombre_cliente or not celular_cliente or not direccion_cliente:
-                    st.error("⚠️ Por favor completa tu Nombre, Celular y Dirección de Envío.")
-                else:
-                    filas_web = []
-                    ahora = datetime.now(TZ_UY)
-                    celular_formateado = limpiar_y_formatear_celular(celular_cliente)
-                    nombre_mayus = nombre_cliente.strip().upper()
+                for prod_full in productos:
+                    precio = precios.get(prod_full, 0)
+                    descuento = descuentos.get(prod_full, 0)
+                    medida_prod = medidas.get(prod_full, "kg")
                     
-                    items_estructurados = []
-                    for p, c in cantidades_seleccionadas.items():
-                        if c > 0:
-                            n_plano = nombres_planos[p]
-                            medida_prod = medidas.get(p, "kg")
-                            subt = c * (precios[p] * (1 - descuentos[p]/100))
-                            ahor = c * (precios[p] * (descuentos[p]/100))
-                            c_txt = f"{int(c)}un" if medida_prod == "un" else f"{c}kg"
-                            
-                            filas_web.append([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), "Web Online", nombre_mayus, n_plano, c, subt, celular_formateado, "Pendiente Pago", "Web - Pendiente", direccion_cliente, ahor, "{}"])
-                            items_estructurados.append({"producto": n_plano, "cantidad": c, "cantidad_txt": c_txt, "subtotal": subt, "ahorro": ahor, "tipo": "Propio"})
-                            
-                    if not filas_web:
-                        st.warning("⚠️ No has seleccionado ningún producto.")
+                    precio_final = precio * (1 - (descuento / 100)) if descuento > 0 else precio
+                    label_precio = f"${precio_final:,.1f} (¡{descuento}% OFF!)" if descuento > 0 else f"${precio:,.1f}"
+                    
+                    st.markdown(f"**{prod_full}** — *Precio:* {label_precio} *(Venta por {medida_prod})*")
+                    
+                    if medida_prod == "un":
+                        cantidades_seleccionadas[prod_full] = float(st.number_input(f"Cantidad (unidades)", min_value=0, step=1, key=f"wun_{prod_full}"))
                     else:
-                        json_items = json.dumps(items_estructurados)
-                        for f_w in filas_web: f_w[12] = json_items 
-                        if observaciones_cliente: filas_web[0][4] += f" | 📝 Obs: {observaciones_cliente}" 
+                        # BALANZA KILOS Y GRAMOS WEB
+                        col_k, col_g = st.columns(2)
+                        with col_k: kg_i = st.number_input("Kilos:", min_value=0.0, step=1.0, key=f"wkg_{prod_full}")
+                        with col_g: gr_i = st.number_input("Gramos:", min_value=0.0, step=50.0, key=f"wgr_{prod_full}")
+                        cantidades_seleccionadas[prod_full] = kg_i + (gr_i / 1000.0)
+                    st.markdown("---")
+            
+            with tab_web3:
+                st.subheader("🚀 Envío Final de tu Pedido")
+                
+                nombre_c = st.session_state.get('cli_web_nombre', '').strip()
+                celular_c = st.session_state.get('cli_web_celular', '').strip()
+                direccion_c = st.session_state.get('cli_web_dir', '').strip()
+                obs_c = st.session_state.get('cli_web_obs', '').strip()
+                
+                # Resumen de lo seleccionado
+                total_resumen = 0.0
+                items_resumen = []
+                for p, c in cantidades_seleccionadas.items():
+                    if c > 0:
+                        pr_unit = precios[p] * (1 - descuentos[p]/100)
+                        sub = c * pr_unit
+                        total_resumen += sub
+                        medida_prod = medidas.get(p, "kg")
+                        c_txt = f"{int(c)}un" if medida_prod == "un" else f"{c}kg"
+                        items_resumen.append(f"• {p}: {c_txt} — ${sub:,.1f}")
+                
+                if items_resumen:
+                    st.markdown(f"**Cliente:** {nombre_c.upper() if nombre_c else '⚠️ Falta ingresar nombre'}")
+                    st.markdown(f"**Celular:** {celular_c if celular_c else '⚠️ Falta ingresar celular'}")
+                    st.markdown(f"**Dirección:** {direccion_c if direccion_c else '⚠️ Falta ingresar dirección'}")
+                    st.markdown("---")
+                    st.markdown("**Detalle de tu compra:**")
+                    for it in items_resumen: st.markdown(it)
+                    st.markdown(f"### Total Estimado: **${total_resumen:,.1f}**")
+                    st.markdown("---")
+                    
+                    if st.button("🚀 Enviar Pedido a la Feria Ahora", type="primary", use_container_width=True):
+                        if not nombre_c or not celular_c or not direccion_c:
+                            st.error("⚠️ Por favor completa tus datos en la pestaña '1️⃣ Tus Datos'.")
+                        else:
+                            filas_web = []
+                            ahora = datetime.now(TZ_UY)
+                            celular_formateado = limpiar_y_formatear_celular(celular_c)
+                            nombre_mayus = nombre_c.upper()
                             
-                        gc = conectar_google()
-                        sh = gc.open_by_url(link_excel)
-                        sh.worksheet("Registro de Ventas").append_rows(filas_web) 
-                        
-                        try:
-                            ws_cli = sh.worksheet("Clientes")
-                            nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
-                            if nombre_mayus not in nombres_existentes:
-                                ws_cli.append_row([nombre_mayus, celular_formateado, "Web"])
-                        except: pass
-                        
-                        limpiar_cache_ventas() 
-                        cargar_datos_feria.clear() 
-                        st.success("✅ ¡Muchas gracias por tu compra! A la brevedad será armada y despachada.")
-                        
-                        num_feriante_limpio = limpiar_y_formatear_celular(celular_feriante)
-                        if not num_feriante_limpio: num_feriante_limpio = "59893343092"
-                        msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n👤 Cliente: {nombre_mayus}\n📍 Dirección: {direccion_cliente}"
-                        st.link_button("📲 Enviar Aviso al Feriante por WhatsApp", f"https://wa.me/{num_feriante_limpio}?text={urllib.parse.quote(msg_feriante)}")
+                            items_estructurados = []
+                            for p, c in cantidades_seleccionadas.items():
+                                if c > 0:
+                                    n_plano = nombres_planos[p]
+                                    medida_prod = medidas.get(p, "kg")
+                                    subt = c * (precios[p] * (1 - descuentos[p]/100))
+                                    ahor = c * (precios[p] * (descuentos[p]/100))
+                                    c_txt = f"{int(c)}un" if medida_prod == "un" else f"{c}kg"
+                                    
+                                    filas_web.append([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), "Web Online", nombre_mayus, n_plano, c, subt, celular_formateado, "Pendiente Pago", "Web - Pendiente", direccion_c, ahor, "{}"])
+                                    items_estructurados.append({"producto": n_plano, "cantidad": c, "cantidad_txt": c_txt, "subtotal": subt, "ahorro": ahor, "tipo": "Propio"})
+                            
+                            json_items = json.dumps(items_estructurados)
+                            for f_w in filas_web: f_w[12] = json_items 
+                            if obs_c: filas_web[0][4] += f" | 📝 Obs: {obs_c}" 
+                                
+                            gc = conectar_google()
+                            sh = gc.open_by_url(link_excel)
+                            sh.worksheet("Registro de Ventas").append_rows(filas_web) 
+                            
+                            try:
+                                ws_cli = sh.worksheet("Clientes")
+                                nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
+                                if nombre_mayus not in nombres_existentes:
+                                    ws_cli.append_row([nombre_mayus, celular_formateado, "Web"])
+                            except: pass
+                            
+                            limpiar_cache_ventas() 
+                            cargar_datos_feria.clear() 
+                            st.success("✅ ¡Muchas gracias por tu compra! Tu pedido ha sido enviado con éxito a la feria.")
+                            
+                            num_feriante_limpio = limpiar_y_formatear_celular(celular_feriante)
+                            if not num_feriante_limpio: num_feriante_limpio = "59893343092"
+                            msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n👤 Cliente: {nombre_mayus}\n📍 Dirección: {direccion_c}\n💰 Total: ${total_resumen:,.1f}"
+                            st.link_button("📲 Enviar Aviso al Feriante por WhatsApp", f"https://wa.me/{num_feriante_limpio}?text={urllib.parse.quote(msg_feriante)}", type="primary", use_container_width=True)
+                else:
+                    st.info("ℹ️ Aún no has seleccionado ningún producto en la pestaña '2️⃣ Armar Pedido'.")
         except Exception as e:
             st.error(f"Error cargando la tienda online: {e}")
     else:
@@ -410,7 +451,7 @@ def ui_retomar_pedidos(ventas_data):
 
 
 # =======================================================
-# PESTAÑA 1: TOMAR PEDIDO (FLUJO DE 3 PASOS SECUENCIALES)
+# PESTAÑA 1: TOMAR PEDIDO (FLUJO DE 3 PASOS)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     with tabs[idx]:
@@ -460,7 +501,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
 
             st.divider()
 
-            # --- PASO 2: AGREGAR PRODUCTOS AL PEDIDO ---
+            # --- PASO 2: PRODUCTOS ---
             st.markdown("### 🛒 Paso 2: Armar el Pedido (Productos)")
             tipo_ingreso = st.radio("Tipo de ítem:", ["Catálogo de Productos", "Ítem Manual / Libre"], horizontal=True, key=f"tipo_ing_{st.session_state.v_rk}")
             
@@ -474,7 +515,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                         cant = float(unidades)
                         formato_txt = f"{int(cant)}un"
                     else:
-                        # BALANZA: KILOS Y GRAMOS PERFECTOS
                         col1, col2 = st.columns(2)
                         with col1: kilos = st.number_input("Kilos:", min_value=0.0, step=1.0, key=f"kv_{st.session_state.v_rk}")
                         with col2: gramos = st.number_input("Gramos:", min_value=0.0, step=50.0, key=f"gv_{st.session_state.v_rk}")
@@ -536,7 +576,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 
                 st.divider()
 
-                # --- PASO 3: ENVIAR Y MANDAR WHATSAPP ---
+                # --- PASO 3: ENVIAR Y WHATSAPP ---
                 st.markdown("### 🚀 Paso 3: Enviar a Caja y Avisar por WhatsApp")
                 if st.button("🚀 Enviar Pedido a la Caja", type="primary", key="btn_enviar_caja", use_container_width=True):
                     cliente_final_mayus = cliente_vendedor.strip().upper()
