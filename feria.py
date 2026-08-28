@@ -502,7 +502,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 
             st.selectbox("Seleccionar Cliente Frecuente:", opciones_cli, index=index_def, key="select_cliente_local", on_change=callback_cliente)
             
-            # Inputs con valores sincronizados del session_state
             cliente_vendedor = st.text_input("Nombre y Apellido:", value=st.session_state.input_cliente_nombre, key="txt_cli_vendedor")
             celular_vendedor = st.text_input("Celular:", value=st.session_state.input_cliente_celular, placeholder="099...", key="txt_cel_vendedor")
             
@@ -669,10 +668,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     
                                     limpiar_cache_ventas()
                                     
-                                    # Generar link de WhatsApp para notificar al cajero/feriante
+                                    cliente_nombre_var = p['cliente']
+                                    vendedor_var = st.session_state.usuario_logueado
+                                    texto_aviso_wsp = f"🔄 *PEDIDO RETOMADO*\n👤 Cliente: {cliente_nombre_var}\n👨‍💼 Vendedor: {vendedor_var}"
                                     num_cajero = limpiar_y_formatear_celular(celular_feriante_local)
                                     if not num_cajero: num_cajero = "59893343092"
-                                    link_wsp_cajero = f"https://wa.me/{num_cajero}?text={urllib.parse.quote(f'🔄 *PEDIDO RETOMADO*\n👤 Cliente: {p[\"cliente\"]}\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}')}"
+                                    link_wsp_cajero = f"https://wa.me/{num_cajero}?text={urllib.parse.quote(texto_aviso_wsp)}"
                                     
                                     st.success(f"✅ ¡Pedido de {p['cliente']} recuperado con éxito!")
                                     st.link_button("📲 Enviar Aviso al Cajero por WhatsApp", link_wsp_cajero, type="primary")
