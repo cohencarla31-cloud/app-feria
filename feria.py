@@ -238,7 +238,6 @@ if "feria" in query_params:
                     if medida_prod == "un":
                         cantidades_seleccionadas[prod_full] = float(st.number_input(f"Cantidad (unidades)", min_value=0, step=1, key=f"wun_{prod_full}"))
                     else:
-                        # BALANZA KILOS Y GRAMOS WEB
                         col_k, col_g = st.columns(2)
                         with col_k: kg_i = st.number_input("Kilos:", min_value=0.0, step=1.0, key=f"wkg_{prod_full}")
                         with col_g: gr_i = st.number_input("Gramos:", min_value=0.0, step=50.0, key=f"wgr_{prod_full}")
@@ -274,9 +273,7 @@ if "feria" in query_params:
                     for it in items_resumen: st.markdown(it)
                     st.markdown(f"### Total Estimado: **${total_resumen:,.1f}**")
                     
-                    # Cartel de advertencia de precio estimado
                     st.warning("⚖️ **Nota importante:** El importe total es *estimado*. Puede variar un poco (más o menos) dependiendo del peso exacto de los productos en la balanza al momento de armarlo.")
-                    
                     st.markdown("---")
                     
                     if st.button("🚀 Enviar Pedido a la Feria Ahora", type="primary", use_container_width=True):
@@ -321,7 +318,12 @@ if "feria" in query_params:
                             
                             num_feriante_limpio = limpiar_y_formatear_celular(celular_feriante)
                             if not num_feriante_limpio: num_feriante_limpio = "59893343092"
-                            msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n👤 Cliente: {nombre_mayus}\n📍 Dirección: {direccion_c}\n💰 Total Estimado: ${total_resumen:,.1f}"
+                            
+                            # --- DETALLE DEL PEDIDO INCLUIDO EN EL WHATSAPP ---
+                            detalle_str = "\n".join(items_resumen)
+                            msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n👤 Cliente: {nombre_mayus}\n📍 Dirección: {direccion_c}\n💰 Total Estimado: ${total_resumen:,.1f}\n\n📦 *Mi Pedido:*\n{detalle_str}"
+                            if obs_c: msg_feriante += f"\n📝 Obs: {obs_c}"
+                            
                             st.link_button("📲 Enviar Aviso al Feriante por WhatsApp", f"https://wa.me/{num_feriante_limpio}?text={urllib.parse.quote(msg_feriante)}", type="primary", use_container_width=True)
                 else:
                     st.info("ℹ️ Aún no has seleccionado ningún producto en la pestaña '2️⃣ Armar Pedido'.")
