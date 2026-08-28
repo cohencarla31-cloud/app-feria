@@ -188,10 +188,15 @@ def cargar_datos_feria(link):
     clientes_dict = {}
     try:
         ws_cli = sh.worksheet("Clientes")
-        for fila in ws_cli.get_all_values()[1:]:
+        filas_cli = ws_cli.get_all_values()
+        for fila in filas_cli[1:]:
             if len(fila) >= 1 and fila[0].strip() and fila[0].strip().lower() != "nombre":
                 nombre_c = fila[0].strip().upper()
-                celular_c = fila[1].strip() if len(fila) > 1 else ""
+                celular_c = str(fila[1]).strip() if len(fila) > 1 and fila[1] else ""
+                # Limpiar notación científica o puntos de excel si los hubiera
+                if "e+" in celular_c or "." in celular_c:
+                    try: celular_c = str(int(float(celular_c)))
+                    except: pass
                 clientes_dict[nombre_c] = celular_c
     except: pass
     
@@ -766,10 +771,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 💳 Cuentas A Cobrar (Saldos Pendientes)")
         
-        # Botón de Refresh explícito
         col_ref1, col_ref2 = st.columns([1, 3])
         with col_ref1:
-            if st.button("🔄 Refrescar Cuentas"):
+            if st.button("🔄 Refrescar Cuentas", key="btn_refresh_cuentas"):
                 limpiar_cache_ventas()
                 st.rerun()
                 
@@ -811,7 +815,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     st.link_button("📲 Enviar Recordatorio de Deuda (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_rec)}")
                     
                     pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=info_c["total"], step=100.0, key="pago_parc_input")
-                    if st.button("💵 Registrar Pago / Saldar Cuenta", type="primary"):
+                    if st.button("💵 Registrar Pago / Saldar Cuenta", type="primary", key="btn_saldar_cta"):
                         nuevo_saldo = info_c["total"] - pago_parcial
                         gc = conectar_google()
                         ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
@@ -826,7 +830,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         
                         limpiar_cache_ventas()
                         st.success("✅ ¡Pago registrado!")
-                        st.link_button("📲 Enviar WhatsApp de Confirmación", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}", type="primary")
+                        st.link_button("📲 Enviar WhatsApp de Confirmación", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}", type="primary", use_container_width=True)
                         st.rerun()
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
