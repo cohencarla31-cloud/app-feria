@@ -606,7 +606,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                         total_carrito += item['subtotal']
                         total_ahorro += item.get('ahorro', 0.0)
                     with c3:
-                        if st.button("❌", key=f"del_{item['id']}_{i}"): indices_a_borrar.append(i)
+                        # --- FIX DEL KEYERROR 'ID' APLICADO AQUÍ ---
+                        if st.button("❌", key=f"del_{item.get('id', i)}_{i}"): indices_a_borrar.append(i)
                 
                 if indices_a_borrar:
                     for index in sorted(indices_a_borrar, reverse=True): st.session_state.carrito_vendedor.pop(index)
@@ -1032,7 +1033,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             with c_e1:
                                 pago_entrega = st.selectbox("Cobrar con:", ["Efectivo", "MercadoPago", "Tarjeta", "FIADO"], key=f"pe_{p['filas'][0]}")
                             with c_e2:
-                                # Botón inteligente de Cobro
                                 texto_boton = "💵 Cobrar Fiado" if "Fiado" in p['estado'] else "💵 Cobrar y Entregar"
                                 if st.button(texto_boton, key=f"ce_{p['filas'][0]}", type="primary"):
                                     gc = conectar_google()
@@ -1053,11 +1053,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                     
                                     cel_f = limpiar_y_formatear_celular(p['celular'])
                                     
-                                    # Calcular si debe algo más después de pagar
                                     deuda_restante = sum(o['total'] for o in todas_las_ordenes if o['cliente'].upper() == p['cliente'].upper() and ("fiado" in o['estado'].lower() or "fiado" in o['pago'].lower()) and o['filas'][0] != p['filas'][0])
                                     
                                     if pago_entrega != "FIADO":
-                                        if "Fiado" in p['estado']: # Si estaba pagando una deuda
+                                        if "Fiado" in p['estado']: 
                                             msg = f"👋 Hola {p['cliente']}, registramos tu pago de ${p['total']:,.1f} ({pago_entrega})."
                                             if deuda_restante > 0: msg += f"\n⚠️ Te queda un saldo pendiente de ${deuda_restante:,.1f}."
                                             else: msg += "\n✅ ¡Tu deuda ha sido saldada por completo! Muchas gracias."
@@ -1110,15 +1109,12 @@ if st.session_state.rol_logueado == "Admin":
                 est = p['estado'].lower()
                 is_web = "web" in p['vendedor'].lower() or "web" in est
                 
-                # Recaudación solo si no es cancelado, no está en caja, no es pendiente ni es fiado
                 if "cancelado" not in est and "caja" not in est and "pendiente" not in est and "fiado" not in est: 
                     total_recaudado += p['total']
                 
-                # Fiados: que diga fiado en pago o en estado
                 if ("fiado" in p['pago'].lower() or "fiado" in est) and "cancelado" not in est and "caja" not in est:
                     fiados.append(p)
                 
-                # Resumen de ventas exitosas
                 if "cancelado" not in est and "caja" not in est:
                     fila_dict = {
                         "Fecha": p['fecha'], "Hora": p['hora'], "Vendedor": p['vendedor'], 
