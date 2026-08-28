@@ -19,6 +19,8 @@ if 'c_rk' not in st.session_state: st.session_state.c_rk = 0
 if 'carrito_vendedor' not in st.session_state: st.session_state.carrito_vendedor = []
 if 'cli_v_temp' not in st.session_state: st.session_state.cli_v_temp = ""
 if 'cel_v_temp' not in st.session_state: st.session_state.cel_v_temp = ""
+if 'input_cliente_nombre' not in st.session_state: st.session_state.input_cliente_nombre = ""
+if 'input_cliente_celular' not in st.session_state: st.session_state.input_cliente_celular = ""
 
 # ==========================================
 # 2. CONEXIÓN Y CACHÉ OPTIMIZADO
@@ -141,7 +143,7 @@ def cargar_datos_feria(link):
         filas_p = ws_prod.get_all_values()
         cabeceras_p = [str(c).strip().lower() for c in filas_p[0]]
         
-        idx_medida = cabeceras_p.index('medida') if 'medida' in cabeceras_p else 6 # Default columna G si existe
+        idx_medida = cabeceras_p.index('medida') if 'medida' in cabeceras_p else 6
         
         for fila in filas_p[1:]:
             if len(fila) >= 3 and fila[1].strip() and fila[1].strip().lower() != "producto":  
@@ -258,7 +260,6 @@ if "feria" in query_params:
                         sh = gc.open_by_url(link_excel)
                         sh.worksheet("Registro de Ventas").append_rows(filas_web) 
                         
-                        # --- CLIENTES FRECUENTES WEB AUTOMÁTICO ---
                         try:
                             ws_cli = sh.worksheet("Clientes")
                             nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
@@ -332,7 +333,7 @@ if st.session_state.usuario_logueado is None:
                                 st.session_state.link_feria = link_excel
                                 st.session_state.es_super_admin = False
                                 st.rerun()
-                            else: st.error("❌ Usuario o Contraseña incorrectos.")
+                            else: st.error("❌ Usuario or Contraseña incorrectos.")
                         else: st.error("❌ Faltan columnas 'Usuario' y 'Clave'.")
             except Exception as e: st.error(f"❌ Error de permisos: {e}")
         else: st.error("❌ Código de empresa inválido.")
@@ -396,8 +397,8 @@ def ui_retomar_pedidos(ventas_data):
                         except:
                             st.session_state.carrito_vendedor = p['items']
                         
-                        st.session_state.cli_v_temp = p['cliente']
-                        st.session_state.cel_v_temp = p['celular']
+                        st.session_state.input_cliente_nombre = p['cliente']
+                        st.session_state.input_cliente_celular = p['celular']
                         
                         gc = conectar_google()
                         ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
@@ -430,25 +431,37 @@ with tabs[idx]:
     if st.session_state.modo_vend == "🛍️ Nueva Venta Local":
         st.write("### 📝 Armar Carrito de Compra")
         
-        # --- DESPLEGABLE INTELIGENTE DE CLIENTES FRECUENTES ---
+        # --- CALLBACKS PARA MANTENER LA MEMORIA DE LOS INPUTS ---
+        def actualizar_cliente_seleccionado():
+            sel = st.session_state.get(f"sel_cli_{st.session_state.v_rk}", "Escribir nuevo...")
+            if sel != "Escribir nuevo...":
+                st.session_state.input_cliente_nombre = sel
+                st.session_state.input_cliente_celular = CLIENTES_DICT.get(sel, "")
+            else:
+                st.session_state.input_cliente_nombre = ""
+                st.session_state.input_cliente_celular = ""
+
         lista_clientes_base = list(CLIENTES_DICT.keys()) if CLIENTES_DICT else []
         opciones_cli = ["Escribir nuevo..."] + lista_clientes_base
         
-        # Determinar índice preseleccionado si se recuperó un cliente temporal
         index_def = 0
-        cli_temp_actual = st.session_state.get('cli_v_temp', '')
-        if cli_temp_actual in lista_clientes_base:
-            index_def = opciones_cli.index(cli_temp_actual)
+        current_cli = st.session_state.get('input_cliente_nombre', '')
+        if current_cli in lista_clientes_base:
+            index_def = opciones_cli.index(current_cli)
             
-        tipo_cli_sel = st.selectbox("Seleccionar Cliente (Frecuentes o Nuevo):", opciones_cli, index=index_def, key=f"sel_cli_{st.session_state.v_rk}")
+        tipo_cli_sel = st.selectbox("Seleccionar Cliente (Frecuentes o Nuevo):", opciones_cli, index=index_def, key=f"sel_cli_{st.session_state.v_rk}", on_change=actualizar_cliente_seleccionado)
         
         if tipo_cli_sel == "Escribir nuevo...":
-            cliente_vendedor = st.text_input("Nombre y Apellido del Cliente:", value=cli_temp_actual, key=f"txt_cli_{st.session_state.v_rk}")
-            celular_vendedor = st.text_input("Celular (Ej: 099123456):", value=st.session_state.get('cel_v_temp', ''), placeholder="099123456", key=f"txt_cel_{st.session_state.v_rk}")
+            cliente_vendedor = st.text_input("Nombre y Apellido del Cliente:", value=st.session_state.input_cliente_nombre, key=f"txt_cli_{st.session_state.v_rk}")
+            celular_vendedor = st.text_input("Celular (Ej: 099123456):", value=st.session_state.input_cliente_celular, placeholder="099123456", key=f"txt_cel_{st.session_state.v_rk}")
+            st.session_state.input_cliente_nombre = cliente_vendedor
+            st.session_state.input_cliente_celular = celular_vendedor
         else:
             cliente_vendedor = tipo_cli_sel
             celular_sugerido = CLIENTES_DICT.get(cliente_vendedor, "")
             celular_vendedor = st.text_input("Celular del Cliente (Precargado / Editable):", value=celular_sugerido, key=f"txt_cli_base_{st.session_state.v_rk}")
+            st.session_state.input_cliente_nombre = cliente_vendedor
+            st.session_state.input_cliente_celular = celular_vendedor
 
         tipo_ingreso = st.radio("Tipo de ítem:", ["Catálogo de Productos", "Ítem Manual / Libre"], horizontal=True, key=f"tipo_ing_{st.session_state.v_rk}")
         
@@ -557,13 +570,13 @@ with tabs[idx]:
                     if not num_cajero: num_cajero = "59893343092"
                     st.session_state.link_vendedor = f"https://wa.me/{num_cajero}?text={urllib.parse.quote(f'💳 *NUEVO PEDIDO EN CAJA*\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\n👤 Cliente: {cliente_vendedor}\n💰 Total a cobrar: ${total_carrito:,.1f}\n📦 Detalle: {det}')}"
                     
+                    # LIMPIEZA ABSOLUTA DE ESTADO PARA NUEVA VENTA
                     st.session_state.carrito_vendedor = []
-                    st.session_state.cli_v_temp = ""
-                    st.session_state.cel_v_temp = ""
+                    st.session_state.input_cliente_nombre = ""
+                    st.session_state.input_cliente_celular = ""
                     st.session_state.v_rk += 1
                     st.rerun()
 
-        # BOTÓN DE WHATSAPP VISIBLE E INMEDIATO AL ENVIAR A CAJA
         if 'msg_vendedor' in st.session_state:
             st.success(st.session_state.msg_vendedor)
             if 'link_vendedor' in st.session_state and st.session_state.link_vendedor:
@@ -571,8 +584,8 @@ with tabs[idx]:
             if st.button("✅ Crear Nuevo Pedido / Seguir Trabajando", type="secondary"):
                 del st.session_state.msg_vendedor
                 if 'link_vendedor' in st.session_state: del st.session_state.link_vendedor
-                st.session_state.cli_v_temp = ""
-                st.session_state.cel_v_temp = ""
+                st.session_state.input_cliente_nombre = ""
+                st.session_state.input_cliente_celular = ""
                 st.session_state.carrito_vendedor = []
                 st.session_state.v_rk += 1
                 st.rerun()
@@ -843,8 +856,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             except:
                                 st.session_state.carrito_vendedor = pedido_c['items']
                             
-                            st.session_state.cli_v_temp = c_cliente
-                            st.session_state.cel_v_temp = c_cel
+                            st.session_state.input_cliente_nombre = c_cliente
+                            st.session_state.input_cliente_celular = c_cel
                             
                             st.session_state.ticket_generado = {"msg": f"✅ Pedido devuelto a 'Tomar Pedido' para editarse.", "link": None}
                             st.rerun()
