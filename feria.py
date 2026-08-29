@@ -133,11 +133,10 @@ def agrupar_pedidos(data, filtro_estados=None):
         try:
             parsed_json = json.loads(v["json"])
             if not parsed_json and v["items"]:
-                # Generación segura de JSON para elementos antiguos
                 v["json"] = json.dumps([{"producto": it.get("producto", ""), "cantidad": it.get("cantidad", 0), "cantidad_txt": it.get("cantidad_txt", f"{it.get('cantidad', 0)}"), "subtotal": it.get("subtotal", 0.0), "ahorro": it.get("ahorro", 0.0), "tipo": it.get("tipo", "Propio")} for it in v["items"]])
         except:
             v["json"] = json.dumps([{"producto": it.get("producto", ""), "cantidad": it.get("cantidad", 0), "cantidad_txt": it.get("cantidad_txt", f"{it.get('cantidad', 0)}"), "subtotal": it.get("subtotal", 0.0), "ahorro": it.get("ahorro", 0.0), "tipo": it.get("tipo", "Propio")} for it in v["items"]])
-        v["detalle"] = " | ".join([f"{item.get('producto', '')} ({item.get('cantidad', '')})" for item in v["items"]])
+        v["detalle"] = " | ".join([f"{item.get('producto', '')} ({item.get('cantidad_txt', item.get('cantidad', ''))})" for item in v["items"]])
         
     lista_ordenes = list(ordenes.values())
     lista_ordenes.sort(key=lambda x: x["filas"][0])
@@ -207,7 +206,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, medidas_planas
 
 # ==========================================
-# 3. MODO TIENDA PÚBLICA (WIZARD)
+# 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS)
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -475,7 +474,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     tabs_nombres.append("💰 Caja y Cobro")
     tabs_nombres.append("💳 Cuentas A Cobrar")
     tabs_nombres.append("🌐 Estado Pedidos Web")
-    tabs_nombres.append("📊 Saldos Web por Cliente")
+    tabs_nombres.append("📊 Saldos Pendientes")
     tabs_nombres.append("🛵 Entregas a Domicilio")
 if st.session_state.rol_logueado == "Admin": 
     tabs_nombres.append("📊 Panel Admin")
@@ -490,7 +489,7 @@ idx = 0
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     with tabs[idx]:
         if st.session_state.cliente_retomado_aviso:
-            st.warning(f"⚠️ **PROCESANDO DE NUEVO AL CLIENTE RETOMADO:** `{st.session_state.cliente_retomado_aviso}`.")
+            st.warning(f"⚠️ **PROCESANDO DE NUEVO AL CLIENTE RETOMADO:** `{st.session_state.cliente_retomado_aviso}`. Los cambios se sumarán a su cuenta.")
             if st.button("❌ Quitar aviso"):
                 st.session_state.cliente_retomado_aviso = ""
                 st.rerun()
@@ -512,7 +511,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
             opciones_cli = ["Escribir nuevo..."] + lista_clientes_base
             
             def callback_cliente():
-                sel = st.session_state.sel_cliente_frecuente
+                sel = st.session_state.get(f"sel_cli_loc_{st.session_state.v_rk}", "Escribir nuevo...")
                 if sel != "Escribir nuevo...":
                     st.session_state.cli_nombre = sel
                     st.session_state.cli_celular = CLIENTES_DICT.get(sel, "")
@@ -520,11 +519,18 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     st.session_state.cli_nombre = ""
                     st.session_state.cli_celular = ""
 
-            st.selectbox("Seleccionar Cliente Frecuente:", opciones_cli, key="sel_cliente_frecuente", on_change=callback_cliente)
+            index_def = 0
+            if st.session_state.cli_nombre in lista_clientes_base:
+                index_def = opciones_cli.index(st.session_state.cli_nombre)
+                
+            st.selectbox("Seleccionar Cliente Frecuente:", opciones_cli, index=index_def, key=f"sel_cli_loc_{st.session_state.v_rk}", on_change=callback_cliente)
             
-            # Variables de texto conectadas directamente a Streamlit Session State
-            st.text_input("Nombre y Apellido:", key="cli_nombre")
-            st.text_input("Celular (Ej: 099...):", key="cli_celular", placeholder="099...")
+            # Variables de texto conectadas al v_rk para limpiar sin errores
+            cli_nom_w = st.text_input("Nombre y Apellido:", value=st.session_state.cli_nombre, key=f"in_nom_{st.session_state.v_rk}")
+            cli_cel_w = st.text_input("Celular (Ej: 099...):", value=st.session_state.cli_celular, placeholder="099...", key=f"in_cel_{st.session_state.v_rk}")
+            
+            st.session_state.cli_nombre = cli_nom_w.strip().upper()
+            st.session_state.cli_celular = cli_cel_w
 
             st.divider()
             st.markdown("### 🛒 Paso 2: Productos")
@@ -611,7 +617,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                         st.session_state.cliente_retomado_aviso = ""
                         st.session_state.cli_nombre = ""
                         st.session_state.cli_celular = ""
-                        st.session_state.v_rk += 1
+                        st.session_state.v_rk += 1  # Esto reinicia los inputs sin error StreamlitAPIException
                         st.rerun()
 
             if 'msg_vendedor' in st.session_state and st.session_state.msg_vendedor:
@@ -732,7 +738,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 st.session_state.cli_nombre = p['cliente']
                                 st.session_state.cli_celular = p['celular']
                                 st.session_state.cliente_retomado_aviso = p['cliente']
-                                st.session_state.modo_tomar = "🛍️ Venta Local" # Teletransporta al usuario a la primera pestaña
+                                st.session_state.modo_tomar = "🛍️ Venta Local" # Vuelve a la sección de local
+                                st.session_state.v_rk += 1 # Reinicia las llaves para inyectar datos
                                 
                                 gc = conectar_google()
                                 ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
@@ -803,6 +810,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 st.session_state.cli_celular = pl['celular']
                                 st.session_state.cliente_retomado_aviso = pl['cliente']
                                 st.session_state.modo_tomar = "🛍️ Venta Local"
+                                st.session_state.v_rk += 1
                                 st.success("✅ Pedido devuelto a 'Tomar Pedido'.")
                                 st.rerun()
             except Exception as e: st.error(f"Error: {e}")
@@ -926,7 +934,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 🌐 Estado de los Pedidos Web (Pendientes)")
         try:
-            # Solo los Pendientes de armar
+            # Solo muestra los pendientes de armar para no marear con la caja
             p_web = agrupar_pedidos(ventas_data_global, ["Web - Pendiente"])
             if not p_web: st.info("No hay pedidos web pendientes de armado.")
             else:
@@ -944,46 +952,53 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 5: SALDOS WEB POR CLIENTE
+# PESTAÑA 5: SALDOS PENDIENTES (DESCARGABLES)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
-        st.write("### 📊 Saldos de Pedidos Web por Cliente")
+        st.write("### 📊 Reporte de Saldos Pendientes (Descargable)")
         try:
             todas_w = agrupar_pedidos(ventas_data_global)
-            web_summary = {}
-            for o in todas_w:
+            
+            fiados_activos = [o for o in todas_w if "fiado" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['pago'].lower() or "cuenta" in o['estado'].lower() or "abono" in o['estado'].lower() or "abono" in o['detalle'].lower() or "pendiente pago" in o['estado'].lower()]
+            
+            deuda_web = {}
+            deuda_local = {}
+            
+            for o in fiados_activos:
+                if "cancelado" in o['estado'].lower(): continue
                 cli = o['cliente']
                 is_web = "web" in o['estado'].lower() or "web" in o['vendedor'].lower()
-                is_abono = "abono" in o['estado'].lower() or "abono" in o['detalle'].lower()
-                is_cancelado = "cancelado" in o['estado'].lower()
+                amt = o['total'] 
                 
-                if is_cancelado: continue
-                
-                if is_web and not is_abono:
-                    if cli not in web_summary: web_summary[cli] = {"total_pedidos": 0.0, "total_cobrado": 0.0}
-                    web_summary[cli]["total_pedidos"] += o['total']
-                    # Si ya lo cobró al 100%
-                    if "cobrado" in o['estado'].lower() and "pendiente" not in o['estado'].lower():
-                        web_summary[cli]["total_cobrado"] += o['total']
-                elif is_abono:
-                    if cli in web_summary:
-                        web_summary[cli]["total_cobrado"] += abs(o['total'])
+                if is_web:
+                    if cli not in deuda_web: deuda_web[cli] = 0.0
+                    deuda_web[cli] += amt
+                else:
+                    if cli not in deuda_local: deuda_local[cli] = 0.0
+                    deuda_local[cli] += amt
+                    
+            tabla_w = [{"Cliente": c, "Saldo Pendiente Web": f"${v:,.1f}", "Saldo Num": v} for c, v in deuda_web.items() if v > 0.01]
+            tabla_l = [{"Cliente": c, "Saldo Pendiente Local": f"${v:,.1f}", "Saldo Num": v} for c, v in deuda_local.items() if v > 0.01]
             
-            tabla_ws = []
-            for cli, data in web_summary.items():
-                saldo = data["total_pedidos"] - data["total_cobrado"]
-                if data["total_pedidos"] > 0:
-                    tabla_ws.append({
-                        "Cliente": cli,
-                        "Total Pedidos Web": f"${data['total_pedidos']:,.1f}",
-                        "Cobranza Registrada": f"${data['total_cobrado']:,.1f}",
-                        "Saldo Pendiente": f"${saldo:,.1f}"
-                    })
-            if not tabla_ws:
-                st.info("No hay registros de pedidos web procesados.")
-            else:
-                st.dataframe(pd.DataFrame(tabla_ws), use_container_width=True)
+            df_w = pd.DataFrame(tabla_w).drop(columns=["Saldo Num"]) if tabla_w else pd.DataFrame(columns=["Cliente", "Saldo Pendiente Web"])
+            df_l = pd.DataFrame(tabla_l).drop(columns=["Saldo Num"]) if tabla_l else pd.DataFrame(columns=["Cliente", "Saldo Pendiente Local"])
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("🌐 Saldos Web")
+                st.dataframe(df_w, use_container_width=True)
+                if not df_w.empty:
+                    csv_w = df_w.to_csv(index=False).encode('utf-8')
+                    st.download_button("📥 Descargar Saldos Web (CSV)", csv_w, "saldos_web.csv", "text/csv")
+                    
+            with c2:
+                st.subheader("🏪 Saldos Locales")
+                st.dataframe(df_l, use_container_width=True)
+                if not df_l.empty:
+                    csv_l = df_l.to_csv(index=False).encode('utf-8')
+                    st.download_button("📥 Descargar Saldos Locales (CSV)", csv_l, "saldos_locales.csv", "text/csv")
+                    
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
@@ -1003,11 +1018,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         try:
             todas = agrupar_pedidos(ventas_data_global)
             
-            # Pedidos pendientes de salir (Excluir los ya Entregados y Cancelados)
             ent_pendientes = [e for e in todas if "entregado" not in e['estado'].lower() and "cancelado" not in e['estado'].lower() and e["direccion"].strip() != ""]
             
-            # Pedidos ya entregados (Solo para cuadro resumen logístico histórico)
-            ent_historial = [e for e in todas if "entregado" in e['estado'].lower() and e["direccion"].strip() != ""][-20:]
+            hoy_str = datetime.now(TZ_UY).strftime("%d/%m/%Y")
+            ent_hoy = [e for e in todas if "entregado" in e['estado'].lower() and e["direccion"].strip() != "" and e['fecha'] == hoy_str]
 
             st.write("#### 🚚 Pendientes de Llevar")
             if not ent_pendientes: st.info("No hay entregas pendientes por llevar.")
@@ -1049,18 +1063,18 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         st.link_button("📲 Avisar 'Va en Camino'", link_wsp)
 
             st.divider()
-            st.write("#### ✅ Resumen Historial de Entregados")
-            if not ent_historial: st.info("No hay historial de entregas recientes.")
+            st.write(f"#### ✅ Resumen Entregados Hoy ({hoy_str})")
+            if not ent_hoy: st.info("Aún no has registrado entregas hoy.")
             else:
-                tabla_hist = []
-                for eh in ent_historial:
-                    tabla_hist.append({
-                        "Fecha": eh['fecha'],
+                tabla_hoy = []
+                for eh in ent_hoy:
+                    tabla_hoy.append({
                         "Cliente": eh['cliente'],
                         "Dirección": eh['direccion'],
-                        "Estado Final": eh['estado']
+                        "Estado Pago": eh['estado'],
+                        "Monto": f"${eh['total']:,.1f}"
                     })
-                st.dataframe(pd.DataFrame(tabla_hist), use_container_width=True)
+                st.dataframe(pd.DataFrame(tabla_hoy), use_container_width=True)
 
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
