@@ -26,7 +26,6 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 TZ_UY = timezone(timedelta(hours=-3))
 LINK_MASTER_SHEET = "https://docs.google.com/spreadsheets/d/1CEuvlAwExOf1FS_ZYeFYw205aoVePb8SCmmLjUJTg-w/edit?gid=0#gid=0"
 
-# Variables dinámicas para reiniciar formularios sin error StreamlitAPIException
 if 'v_rk' not in st.session_state: st.session_state.v_rk = 0 
 if 'c_rk' not in st.session_state: st.session_state.c_rk = 0 
 if 'carrito_vendedor' not in st.session_state: st.session_state.carrito_vendedor = []
@@ -72,7 +71,6 @@ def limpiar_y_formatear_celular(celular_ingresado):
     if pd.isna(celular_ingresado) or str(celular_ingresado).strip() == "" or str(celular_ingresado).strip().lower() == "nan": 
         return ""
     cel_str = str(celular_ingresado).strip()
-    # Limpieza de formato científico que arroja Excel
     if "e+" in cel_str or "." in cel_str:
         try: cel_str = str(int(float(cel_str)))
         except: pass
@@ -170,7 +168,6 @@ def cargar_datos_feria(link):
                 try: precio = float(precio_str) if precio_str else 0.0
                 except: precio = 0.0
                 
-                # Importar el descuento correctamente
                 desc = 0.0
                 if len(fila) >= 6 and str(fila[5]).strip() and str(fila[5]).strip().lower() != "nan":
                     desc_str = str(fila[5]).replace("%", "").replace(",", ".").strip()
@@ -502,27 +499,19 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
             lista_clientes_base = sorted(list(CLIENTES_DICT.keys())) if CLIENTES_DICT else []
             opciones_cli = ["Escribir nuevo..."] + lista_clientes_base
             
-            def callback_cliente():
-                sel = st.session_state.get(f"select_cliente_local_{st.session_state.v_rk}", "Escribir nuevo...")
-                if sel != "Escribir nuevo...":
-                    st.session_state.input_cliente_nombre = sel
-                    st.session_state.input_cliente_celular = CLIENTES_DICT.get(sel, "")
-                else:
-                    st.session_state.input_cliente_nombre = ""
-                    st.session_state.input_cliente_celular = ""
-
-            index_def = 0
-            if st.session_state.input_cliente_nombre in lista_clientes_base:
-                index_def = opciones_cli.index(st.session_state.input_cliente_nombre)
-                
-            st.selectbox("Seleccionar Cliente Frecuente:", opciones_cli, index=index_def, key=f"select_cliente_local_{st.session_state.v_rk}", on_change=callback_cliente)
+            sel_cli = st.selectbox("Seleccionar Cliente (Frecuente o Nuevo):", opciones_cli, key=f"sel_cli_loc_{st.session_state.v_rk}")
             
-            # Inputs dinámicos que se resetean al cambiar v_rk
-            cliente_vendedor = st.text_input("Nombre y Apellido:", value=st.session_state.input_cliente_nombre, key=f"txt_cli_vendedor_{st.session_state.v_rk}")
-            celular_vendedor = st.text_input("Celular:", value=st.session_state.input_cliente_celular, placeholder="099...", key=f"txt_cel_vendedor_{st.session_state.v_rk}")
-            
-            st.session_state.input_cliente_nombre = cliente_vendedor.strip().upper()
-            st.session_state.input_cliente_celular = celular_vendedor
+            if sel_cli == "Escribir nuevo...":
+                cliente_vendedor = st.text_input("Nombre y Apellido:", key=f"cli_nom_{st.session_state.v_rk}")
+                celular_vendedor = st.text_input("Celular (Ej: 099123456):", placeholder="099...", key=f"cli_cel_{st.session_state.v_rk}")
+                st.session_state.input_cliente_nombre = cliente_vendedor.strip().upper()
+                st.session_state.input_cliente_celular = celular_vendedor
+            else:
+                cliente_vendedor = sel_cli
+                celular_sugerido = CLIENTES_DICT.get(sel_cli, "")
+                celular_vendedor = st.text_input("Celular (Precargado / Editable):", value=celular_sugerido, key=f"cli_cel_{st.session_state.v_rk}")
+                st.session_state.input_cliente_nombre = cliente_vendedor.strip().upper()
+                st.session_state.input_cliente_celular = celular_vendedor
 
             st.divider()
             st.markdown("### 🛒 Paso 2: Productos")
@@ -545,51 +534,77 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_buscado, 0)
                     pr_fin = pr_orig * (1 - desc_p/100)
                     subt = cant * pr_fin
+                    
+                    st.info(f"Subtotal: **${subt:,.1f}**" + (f" (Ahorro de ${cant*(pr_orig-pr_fin):,.1f})" if desc_p>0 else ""))
+                    
                     if st.button("➕ Agregar al Carrito", key=f"btn_add_{st.session_state.v_rk}"):
                         st.session_state.carrito_vendedor.append({
                             "id": datetime.now().timestamp(), "producto": NOMBRES.get(prod_buscado, prod_buscado),
                             "cantidad": cant, "cantidad_txt": formato_txt, "subtotal": subt, "ahorro": cant*(pr_orig-pr_fin), "tipo": "Propio"
                         })
-                        # Limpiar campos de cantidad sumando al id
                         st.session_state.v_rk += 1
                         st.rerun()
 
             if st.session_state.carrito_vendedor:
                 st.markdown("#### Resumen Carrito")
                 tot_c = 0.0
+                tot_ahorro = 0.0
                 del_idx = []
                 for i, item in enumerate(st.session_state.carrito_vendedor):
-                    st.write(f"• {item['producto']} ({item['cantidad_txt']}) — ${item['subtotal']:,.1f}")
+                    c1, c2, c3 = st.columns([3,1,1])
+                    with c1: st.write(f"• {item['producto']} ({item['cantidad_txt']})")
+                    with c2: st.write(f"${item['subtotal']:,.1f}")
+                    with c3:
+                        if st.button("❌", key=f"del_{item.get('id', i)}_{i}"): del_idx.append(i)
                     tot_c += item['subtotal']
-                    if st.button("❌ Borrar", key=f"del_{item.get('id', i)}_{i}"): del_idx.append(i)
+                    tot_ahorro += item.get('ahorro', 0.0)
+                    
                 if del_idx:
                     for di in sorted(del_idx, reverse=True): st.session_state.carrito_vendedor.pop(di)
                     st.rerun()
 
-                st.markdown(f"### Total: **${tot_c:,.1f}**")
+                st.markdown(f"### Total a Pagar: **${tot_c:,.1f}**")
+                if tot_ahorro > 0: st.success(f"🎉 Ahorro Total: ${tot_ahorro:,.1f}")
                 st.divider()
 
                 if st.button("🚀 Enviar a Caja", type="primary", use_container_width=True):
                     if not st.session_state.input_cliente_nombre:
-                        st.error("⚠️ Falta el nombre del cliente.")
+                        st.error("⚠️ Falta el nombre del cliente en el Paso 1.")
                     else:
                         ahora = datetime.now(TZ_UY)
                         cel_f = limpiar_y_formatear_celular(st.session_state.input_cliente_celular)
+                        cli_nombre_final = st.session_state.input_cliente_nombre.strip().upper()
                         items_json = json.dumps(st.session_state.carrito_vendedor)
                         filas = []
                         for item in st.session_state.carrito_vendedor:
-                            filas.append([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, st.session_state.input_cliente_nombre, item['producto'], item['cantidad'], item['subtotal'], cel_f, "Efectivo", "En Caja", "", item.get('ahorro', 0), items_json])
+                            filas.append([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cli_nombre_final, item['producto'], item['cantidad'], item['subtotal'], cel_f, "Efectivo", "En Caja", "", item.get('ahorro', 0), items_json])
                         
                         gc = conectar_google()
                         gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas").append_rows(filas)
                         limpiar_cache_ventas()
+                        
+                        det = " | ".join([f"{r['producto']}: {r['cantidad_txt']}" for r in st.session_state.carrito_vendedor])
+                        st.session_state.msg_vendedor = "✅ ¡Pedido enviado a la Caja con éxito!"
+                        num_cajero = limpiar_y_formatear_celular(celular_feriante_local)
+                        if not num_cajero: num_cajero = "59893343092"
+                        st.session_state.link_vendedor = f"https://wa.me/{num_cajero}?text={urllib.parse.quote(f'💳 *NUEVO PEDIDO EN CAJA*\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\n👤 Cliente: {cli_nombre_final}\n💰 Total: ${tot_c:,.1f}\n📦 Detalle: {det}')}"
+                        
                         st.session_state.carrito_vendedor = []
                         st.session_state.cliente_retomado_aviso = ""
                         st.session_state.input_cliente_nombre = ""
                         st.session_state.input_cliente_celular = ""
                         st.session_state.v_rk += 1
-                        st.success("✅ Pedido enviado a caja con éxito!")
                         st.rerun()
+
+            if 'msg_vendedor' in st.session_state:
+                st.success(st.session_state.msg_vendedor)
+                if 'link_vendedor' in st.session_state and st.session_state.link_vendedor:
+                    st.link_button("📲 ENVIAR WHATSAPP AL CAJERO", st.session_state.link_vendedor, type="primary", use_container_width=True)
+                if st.button("✅ Crear Nuevo Pedido", type="secondary", use_container_width=True):
+                    del st.session_state.msg_vendedor
+                    if 'link_vendedor' in st.session_state: del st.session_state.link_vendedor
+                    st.session_state.v_rk += 1
+                    st.rerun()
 
         # --- SUB-TAB 2: AJUSTAR PEDIDO WEB ---
         with sub_tomar_2:
@@ -609,6 +624,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                         st.markdown("---")
                         
                         tot_real = 0.0
+                        tot_ahor = 0.0
                         nuevos_i = []
                         
                         for idx_item, it in enumerate(p_sel["items"]):
@@ -632,12 +648,17 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                             pr_u = PRECIOS.get(it["producto"], PRECIOS.get(NOMBRES.get(it["producto"], it["producto"]), 100))
                             desc_u = DESCUENTOS.get(it["producto"], 0)
                             sub_r = p_real * (pr_u * (1 - desc_u/100))
+                            ahor_i = p_real * (pr_u * (desc_u/100))
+                            
                             tot_real += sub_r
+                            tot_ahor += ahor_i
                             c_txt = f"{int(p_real)}un" if medida_p == "un" else f"{p_real}kg"
-                            nuevos_i.append({"producto": it["producto"], "cantidad": p_real, "cantidad_txt": c_txt, "subtotal": sub_r, "ahorro": p_real*(pr_u*(desc_u/100)), "tipo": "Propio"})
+                            nuevos_i.append({"producto": it["producto"], "cantidad": p_real, "cantidad_txt": c_txt, "subtotal": sub_r, "ahorro": ahor_i, "tipo": "Propio"})
                             st.markdown("---")
                         
                         st.markdown(f"### Total Ajustado: **${tot_real:,.1f}**")
+                        if tot_ahor > 0: st.success(f"Ahorro para el cliente: ${tot_ahor:,.1f}")
+                            
                         if st.button("⚖️ Confirmar Pesos y Enviar a Caja Web", type="primary"):
                             gc = conectar_google()
                             ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
