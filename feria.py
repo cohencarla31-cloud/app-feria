@@ -26,16 +26,14 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 TZ_UY = timezone(timedelta(hours=-3))
 LINK_MASTER_SHEET = "https://docs.google.com/spreadsheets/d/1CEuvlAwExOf1FS_ZYeFYw205aoVePb8SCmmLjUJTg-w/edit?gid=0#gid=0"
 
+# Variables de estado seguras para evitar StreamlitAPIException
 if 'v_rk' not in st.session_state: st.session_state.v_rk = 0 
-if 'c_rk' not in st.session_state: st.session_state.c_rk = 0 
 if 'carrito_vendedor' not in st.session_state: st.session_state.carrito_vendedor = []
 if 'cli_nombre' not in st.session_state: st.session_state.cli_nombre = ""
 if 'cli_celular' not in st.session_state: st.session_state.cli_celular = ""
 if 'web_step' not in st.session_state: st.session_state.web_step = 1
 if 'cliente_retomado_aviso' not in st.session_state: st.session_state.cliente_retomado_aviso = ""
 if 'carrito_web' not in st.session_state: st.session_state.carrito_web = []
-if 'msg_ajuste_web' not in st.session_state: st.session_state.msg_ajuste_web = ""
-if 'link_ajuste_web' not in st.session_state: st.session_state.link_ajuste_web = ""
 
 # ==========================================
 # 2. CONEXIÓN Y CACHÉ OPTIMIZADO
@@ -502,7 +500,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
             opciones_cli = ["Escribir nuevo..."] + lista_clientes_base
             
             def callback_cliente():
-                sel = st.session_state.select_cliente_local
+                sel = st.session_state.get(f"sel_cli_loc_{st.session_state.v_rk}", "Escribir nuevo...")
                 if sel != "Escribir nuevo...":
                     st.session_state.cli_nombre = sel
                     st.session_state.cli_celular = CLIENTES_DICT.get(sel, "")
@@ -510,11 +508,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     st.session_state.cli_nombre = ""
                     st.session_state.cli_celular = ""
 
-            st.selectbox("Seleccionar Cliente Frecuente:", opciones_cli, key="select_cliente_local", on_change=callback_cliente)
+            st.selectbox("Seleccionar Cliente Frecuente:", opciones_cli, key=f"sel_cli_loc_{st.session_state.v_rk}", on_change=callback_cliente)
             
-            # Usamos cli_nombre y cli_celular fijos
-            st.session_state.cli_nombre = st.text_input("Nombre y Apellido:", value=st.session_state.cli_nombre).strip().upper()
-            st.session_state.cli_celular = st.text_input("Celular (Ej: 099123456):", value=st.session_state.cli_celular, placeholder="099...")
+            cli_nom = st.text_input("Nombre y Apellido:", value=st.session_state.cli_nombre, key=f"nom_{st.session_state.v_rk}")
+            cli_cel = st.text_input("Celular (Ej: 099...):", value=st.session_state.cli_celular, placeholder="099...", key=f"cel_{st.session_state.v_rk}")
+            st.session_state.cli_nombre = cli_nom.strip().upper()
+            st.session_state.cli_celular = cli_cel
 
             st.divider()
             st.markdown("### 🛒 Paso 2: Productos")
@@ -596,7 +595,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                         st.session_state.cliente_retomado_aviso = ""
                         st.session_state.cli_nombre = ""
                         st.session_state.cli_celular = ""
-                        st.session_state.select_cliente_local = "Escribir nuevo..."
                         st.session_state.v_rk += 1
                         st.rerun()
 
@@ -729,6 +727,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     ws.batch_update(updates)
                                     
                                     limpiar_cache_ventas()
+                                    st.session_state.v_rk += 1
                                     st.success(f"✅ ¡Pedido recuperado! Ve a la sub-pestaña '🛍️ Venta Local'.")
                             st.markdown("---")
                 except Exception as e: st.error(f"Error: {e}")
@@ -774,7 +773,11 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 ws.batch_update(upd)
                                 limpiar_cache_ventas()
                                 
-                                msg = f"👋 Hola {pl['cliente']}, registramos tu pago de ${pl['total']:,.1f} ({pago_l}). ¡Gracias!"
+                                if pago_l == "A Cuenta":
+                                    msg = f"👋 Hola {pl['cliente']}, tu compra de ${pl['total']:,.1f} en *{nombre_empresa}* quedó registrada a tu cuenta. ¡Gracias!"
+                                else:
+                                    msg = f"👋 Hola {pl['cliente']}, registramos tu pago de ${pl['total']:,.1f} ({pago_l}). ¡Gracias!"
+                                    
                                 st.success("✅ ¡Cobro registrado!")
                                 st.link_button("📲 Enviar WhatsApp", f"https://wa.me/{limpiar_y_formatear_celular(pl['celular'])}?text={urllib.parse.quote(msg)}", type="primary")
                         with col_bl2:
@@ -788,6 +791,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 st.session_state.cli_nombre = pl['cliente']
                                 st.session_state.cli_celular = pl['celular']
                                 st.session_state.cliente_retomado_aviso = pl['cliente']
+                                st.session_state.v_rk += 1
                                 st.success("✅ Pedido devuelto a 'Tomar Pedido'.")
                                 st.rerun()
             except Exception as e: st.error(f"Error: {e}")
@@ -827,8 +831,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         try:
             ventas_data_cuentas = obtener_ventas(st.session_state.link_feria)
             todas_o = agrupar_pedidos(ventas_data_cuentas)
-            # Evitamos buscar "abono" en 'producto', lo buscamos en 'detalle'
-            fiados_activos = [o for o in todas_o if "fiado" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['pago'].lower() or "cuenta" in o['estado'].lower() or "abono" in o['estado'].lower() or "abono" in o['detalle'].lower()]
+            # Buscar en detalle para evitar KeyError de 'producto'
+            fiados_activos = [o for o in todas_o if "fiado" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['pago'].lower() or "cuenta" in o['estado'].lower() or "abono" in o['estado'].lower() or "abono" in o['detalle'].lower() or "pendiente pago" in o['estado'].lower()]
             
             clientes_fiado = {}
             for f_ord in fiados_activos:
@@ -928,14 +932,27 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 🛵 Control de Entregas a Domicilio (Logística)")
+        
+        col_ent1, col_ent2 = st.columns([1, 3])
+        with col_ent1:
+            if st.button("🔄 Refrescar Entregas"):
+                limpiar_cache_ventas()
+                st.rerun()
+
         try:
             todas = agrupar_pedidos(ventas_data_global)
-            entregas = [e for e in todas if e['estado'] in ["Envío Cuenta", "Cobrado", "Fiado Pendiente", "Pendiente Pago", "Web - Cobrado", "Web - Fiado Pendiente", "Web - Pendiente Pago"] and e["direccion"].strip() != ""]
+            # Solo pendientes (Excluir Entregado y Cancelado)
+            ent_pendientes = [e for e in todas if "entregado" not in e['estado'].lower() and "cancelado" not in e['estado'].lower() and e["direccion"].strip() != ""]
             
-            if not entregas: st.info("No hay entregas pendientes.")
+            # Resumen de Entregados Hoy
+            hoy_str = datetime.now(TZ_UY).strftime("%d/%m/%Y")
+            ent_hoy = [e for e in todas if "entregado" in e['estado'].lower() and e["direccion"].strip() != "" and e['fecha'] == hoy_str]
+
+            st.write("#### 🚚 Pendientes de Entrega")
+            if not ent_pendientes: st.info("No hay entregas pendientes.")
             else:
                 tabla_ent = []
-                for ent in entregas:
+                for ent in ent_pendientes:
                     tabla_ent.append({
                         "Cliente": ent['cliente'],
                         "Dirección": ent['direccion'],
@@ -944,12 +961,11 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     })
                 st.dataframe(pd.DataFrame(tabla_ent), use_container_width=True)
                 
-                st.markdown("---")
-                st.write("#### Acciones de Entrega:")
-                sel_ent = st.selectbox("Seleccionar entrega:", ["Seleccionar..."] + [f"{e['cliente']} - {e['direccion']} (ID {e['filas'][0]})" for e in entregas], key="sel_ent_box")
+                st.write("#### Acciones de Logística:")
+                sel_ent = st.selectbox("Seleccionar entrega:", ["Seleccionar..."] + [f"{e['cliente']} - {e['direccion']} (ID {e['filas'][0]})" for e in ent_pendientes], key="sel_ent_box")
                 if sel_ent != "Seleccionar...":
                     id_e = int(sel_ent.split("(ID ")[1].replace(")", ""))
-                    ent_sel = next(x for x in entregas if x['filas'][0] == id_e)
+                    ent_sel = next(x for x in ent_pendientes if x['filas'][0] == id_e)
                     
                     c_e1, c_e2 = st.columns(2)
                     with c_e1:
@@ -957,7 +973,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             gc = conectar_google()
                             ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
                             col_e = chr(65 + ent_sel['idx_est'])
-                            ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Entregado"]]} for f in ent_sel["filas"]])
+                            
+                            nuevo_est = "Entregado"
+                            if "Pendiente Pago" in ent_sel['estado']: nuevo_est = "Entregado (Pendiente Pago)"
+                            elif "Cuenta" in ent_sel['estado'] or "Fiado" in ent_sel['estado']: nuevo_est = "Entregado (A Cuenta)"
+                            
+                            ws.batch_update([{'range': f'{col_e}{f}', 'values': [[nuevo_est]]} for f in ent_sel["filas"]])
                             limpiar_cache_ventas()
                             st.success("✅ Marcado como Entregado.")
                             st.rerun()
@@ -965,6 +986,21 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         cli_nombre = ent_sel['cliente']
                         link_wsp = f"https://wa.me/{limpiar_y_formatear_celular(ent_sel['celular'])}?text={urllib.parse.quote('Hola ' + cli_nombre + '. Tu pedido va en camino a tu domicilio.')}"
                         st.link_button("📲 Avisar 'Va en Camino'", link_wsp)
+
+            st.divider()
+            st.write(f"#### ✅ Resumen Entregados Hoy ({hoy_str})")
+            if not ent_hoy: st.info("Aún no has registrado entregas hoy.")
+            else:
+                tabla_hoy = []
+                for eh in ent_hoy:
+                    tabla_hoy.append({
+                        "Cliente": eh['cliente'],
+                        "Dirección": eh['direccion'],
+                        "Estado Pago": eh['estado'],
+                        "Monto": f"${eh['total']:,.1f}"
+                    })
+                st.dataframe(pd.DataFrame(tabla_hoy), use_container_width=True)
+
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
