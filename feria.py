@@ -68,12 +68,8 @@ def obtener_datos_cliente(codigo_empresa):
     return None
 
 def limpiar_y_formatear_celular(celular_ingresado):
-    if not celular_ingresado or pd.isna(celular_ingresado): return ""
-    # Si viene con notación científica de Excel (ej: 5.989334e+10)
+    if not celular_ingresado: return ""
     cel_str = str(celular_ingresado).strip()
-    if "e+" in cel_str or "." in cel_str:
-        try: cel_str = str(int(float(cel_str)))
-        except: pass
     num = ''.join(filter(str.isdigit, cel_str))
     if not num: return ""
     if len(num) == 10 and not num.startswith("0") and not num.startswith("54"):
@@ -198,7 +194,8 @@ def cargar_datos_feria(link):
         for fila in filas_cli[1:]:
             if len(fila) >= 1 and fila[0].strip() and fila[0].strip().lower() != "nombre":
                 nombre_c = fila[0].strip().upper()
-                celular_c = limpiar_y_formatear_celular(fila[1]) if len(fila) > 1 and fila[1] else ""
+                # Leer celda cruda con get_all_values para evitar notación científica de Excel
+                celular_c = str(fila[1]).strip() if len(fila) > 1 and fila[1] else ""
                 clientes_dict[nombre_c] = celular_c
     except: pass
     
@@ -780,7 +777,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 st.rerun()
                 
         try:
-            # Forzamos recarga fresca de datos al entrar a Cuentas a Cobrar
             ventas_data_cuentas = obtener_ventas(st.session_state.link_feria)
             todas_o = agrupar_pedidos(ventas_data_cuentas)
             fiados_activos = [o for o in todas_o if "fiado" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['pago'].lower() or "cuenta" in o['estado'].lower()]
@@ -818,27 +814,30 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     msg_rec = f"👋 Hola {cliente_elegido}, desde *{nombre_empresa}* te recordamos que tu saldo pendiente a cuenta es de *${info_c['total']:,.1f}*. ¡Muchas gracias!"
                     st.link_button("📲 Enviar Recordatorio de Deuda (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_rec)}")
                     
-                    pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(info_c["total"]), step=100.0, key="pago_parc_input")
-                    if st.button("💵 Registrar Pago / Saldar Cuenta", type="primary", key="btn_saldar_cta"):
-                        if pago_parcial > 0:
-                            nuevo_saldo = info_c["total"] - pago_parcial
-                            gc = conectar_google()
-                            ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
-                            
-                            if nuevo_saldo <= 0:
-                                msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu deuda a cuenta ha sido saldada por completo! Muchas gracias."
-                                for pd in info_c["pedidos"]:
-                                    col_e = chr(65 + pd['idx_est'])
-                                    ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Cobrado"]]} for f in pd['filas']])
+                    # Usamos st.form para asegurar que el registro de pago procese el input y se recargue con éxito
+                    with st.form(key=f"form_pago_{cliente_elegido}"):
+                        pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(info_c["total"]), step=100.0, key="pago_parc_input")
+                        submit_pago = st.form_submit_button("💵 Registrar Pago / Saldar Cuenta", type="primary")
+                        
+                        if submit_pago:
+                            if pago_parcial > 0:
+                                nuevo_saldo = info_c["total"] - pago_parcial
+                                gc = conectar_google()
+                                ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                                
+                                if nuevo_saldo <= 0:
+                                    msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu deuda a cuenta ha sido saldada por completo! Muchas gracias."
+                                    for pd in info_c["pedidos"]:
+                                        col_e = chr(65 + pd['idx_est'])
+                                        ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Cobrado"]]} for f in pd['filas']])
+                                else:
+                                    msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente a cuenta de ${nuevo_saldo:,.1f}."
+                                
+                                limpiar_cache_ventas()
+                                st.success("✅ ¡Pago registrado con éxito!")
+                                st.link_button("📲 Enviar WhatsApp de Confirmación", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}", type="primary")
                             else:
-                                msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente a cuenta de ${nuevo_saldo:,.1f}."
-                            
-                            limpiar_cache_ventas()
-                            st.success("✅ ¡Pago registrado con éxito!")
-                            st.link_button("📲 Enviar WhatsApp de Confirmación", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}", type="primary", use_container_width=True)
-                            st.rerun()
-                        else:
-                            st.warning("⚠️ Ingresa un monto mayor a 0 para registrar el pago.")
+                                st.warning("⚠️ Ingresa un monto mayor a 0 para registrar el pago.")
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
