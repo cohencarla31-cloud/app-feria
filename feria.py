@@ -498,7 +498,6 @@ if st.session_state.usuario_logueado is None:
     clave_intento = st.text_input("Contraseña:", type="password", key="cla_norm")
     
     if st.button("🚪 Ingresar", type="primary"):
-        # ESCUDO ANTI-BOTS: Pausa invisible de seguridad contra hackeo por fuerza bruta
         time.sleep(1.5)
         
         if empresa_intento == "MASTER" and clave_intento == "MiClaveSuperSecreta2026":
@@ -563,6 +562,7 @@ st.title(f"🏢 {nombre_empresa}")
 # ==========================================
 # 5. PESTAÑAS Y ROLES ORDENADOS
 # ==========================================
+# Aquí organizamos las pestañas. Colocamos Reporte de Saldos Pendientes al final con los Pro
 tabs_nombres = []
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]: 
     tabs_nombres.append("📝 Tomar Pedido")
@@ -570,15 +570,15 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     tabs_nombres.append("💰 Caja y Cobro")
     tabs_nombres.append("💳 Cuentas A Cobrar")
     tabs_nombres.append("🌐 Estado Pedidos Web")
-    tabs_nombres.append("📊 Saldos Pendientes")
     tabs_nombres.append("🛵 Entregas a Domicilio")
 if st.session_state.rol_logueado == "Admin": 
     tabs_nombres.append("📊 Panel Admin")
-    tabs_nombres.append("📈 Reportes Pro")
+    tabs_nombres.append("📈 Reportes Pro (Stock y Ventas)")
+    tabs_nombres.append("📥 Reportes Pro (Saldos Pendientes)")
 
 # Pestaña Guía de Uso
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
-    tabs_nombres.append("📖 Cómo Funciona")
+    tabs_nombres.append("📖 Guía de Uso")
 
 tabs = st.tabs(tabs_nombres)
 idx = 0
@@ -1124,11 +1124,170 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 5: SALDOS PENDIENTES
+# PESTAÑA 5: ENTREGAS A DOMICILIO
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
-        st.write("### 📊 Reporte de Saldos Pendientes (Descargable)")
+        st.write("### 🛵 Control de Entregas a Domicilio (Logística)")
+        
+        col_ent1, col_ent2 = st.columns([1, 3])
+        with col_ent1:
+            if st.button("🔄 Refrescar Entregas"):
+                limpiar_cache_ventas()
+                st.rerun()
+
+        try:
+            todas = agrupar_pedidos(ventas_data_global)
+            
+            ent_pendientes = [e for e in todas if "entregado" not in e['estado'].lower() and "cancelado" not in e['estado'].lower() and e["direccion"].strip() != ""]
+            
+            hoy_str = datetime.now(TZ_UY).strftime("%d/%m/%Y")
+            ent_hoy = [e for e in todas if "entregado" in e['estado'].lower() and e["direccion"].strip() != "" and e['fecha'] == hoy_str]
+
+            st.write("#### 🚚 Pendientes de Llevar")
+            if not ent_pendientes: st.info("No hay entregas pendientes por llevar.")
+            else:
+                tabla_ent = []
+                for ent in ent_pendientes:
+                    tabla_ent.append({
+                        "Cliente": ent['cliente'],
+                        "Dirección": ent['direccion'],
+                        "Monto": f"${ent['total']:,.1f}"
+                    })
+                st.dataframe(pd.DataFrame(tabla_ent), use_container_width=True)
+                
+                st.write("#### Acciones de Logística:")
+                sel_ent = st.selectbox("Seleccionar entrega:", ["Seleccionar..."] + [f"{e['cliente']} - {e['direccion']} (ID {e['filas'][0]})" for e in ent_pendientes], key="sel_ent_box")
+                if sel_ent != "Seleccionar...":
+                    id_e = int(sel_ent.split("(ID ")[1].replace(")", ""))
+                    ent_sel = next(x for x in ent_pendientes if x['filas'][0] == id_e)
+                    
+                    c_e1, c_e2 = st.columns(2)
+                    with c_e1:
+                        if st.button("🛵 Marcar como Entregado", type="primary", use_container_width=True):
+                            gc = conectar_google()
+                            ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                            col_e = chr(65 + ent_sel['idx_est'])
+                            
+                            nuevo_est = "Entregado"
+                            if "Pendiente Pago" in ent_sel['estado']: nuevo_est = "Entregado (Pendiente Pago)"
+                            elif "Cuenta" in ent_sel['estado'] or "Fiado" in ent_sel['estado']: nuevo_est = "Entregado (A Cuenta)"
+                            if "Web" in ent_sel['estado']: nuevo_est = "Web - " + nuevo_est
+                            
+                            ws.batch_update([{'range': f'{col_e}{f}', 'values': [[nuevo_est]]} for f in ent_sel["filas"]])
+                            limpiar_cache_ventas()
+                            time.sleep(1)
+                            st.success("✅ Marcado como Entregado en el sistema.")
+                            st.rerun()
+                    with c_e2:
+                        cli_nombre = ent_sel['cliente']
+                        link_wsp = f"https://wa.me/{limpiar_y_formatear_celular(ent_sel['celular'])}?text={urllib.parse.quote('Hola ' + cli_nombre + '. Tu pedido va en camino a tu domicilio.')}"
+                        st.link_button("📲 Avisar 'Va en Camino'", link_wsp, use_container_width=True)
+
+            st.divider()
+            st.write(f"#### ✅ Resumen Entregados Hoy ({hoy_str})")
+            if not ent_hoy: st.info("Aún no has registrado entregas hoy.")
+            else:
+                tabla_hoy = []
+                for eh in ent_hoy:
+                    tabla_hoy.append({
+                        "Cliente": eh['cliente'],
+                        "Dirección": eh['direccion'],
+                        "Estado Final": eh['estado']
+                    })
+                st.dataframe(pd.DataFrame(tabla_hoy), use_container_width=True)
+
+        except Exception as e: st.error(f"Error: {e}")
+    idx += 1
+
+# =======================================================
+# PESTAÑA 6: PANEL ADMIN
+# =======================================================
+if st.session_state.rol_logueado == "Admin":
+    with tabs[idx]:
+        st.write("### 📊 Panel Admin y Arqueo de Caja")
+        
+        with st.expander("🔒 Arqueo y Auditoría de Caja (Efectivo Inicial y Final)"):
+            ef_inicial = st.number_input("Efectivo Inicial en Caja (Fondo de cambio $):", min_value=0.0, step=100.0, value=st.session_state.get('ef_inicial', 0.0))
+            st.session_state.ef_inicial = ef_inicial
+            efectivo_sistema = 0.0
+            try:
+                for row in ventas_data_global[1:]:
+                    if len(row) > 9 and row[0] == datetime.now(TZ_UY).strftime("%d/%m/%Y"):
+                        pago_v = str(row[8]).lower() if len(row) > 8 else ""
+                        est_v = str(row[10]).lower() if len(row) > 10 else ""
+                        if "efectivo" in pago_v and "cancelado" not in est_v:
+                            try: efectivo_sistema += float(str(row[6]).replace("$","").replace(",","."))
+                            except: pass
+            except: pass
+            
+            esperado_en_caja = ef_inicial + efectivo_sistema
+            st.write(f"💵 **Efectivo esperado en caja (Inicial + Ventas Efectivo):** ${esperado_en_caja:,.1f}")
+            ef_final = st.number_input("Efectivo Final (Conteo físico en caja $):", min_value=0.0, step=100.0, key="ef_fin_input")
+            if ef_final > 0:
+                diferencia = ef_final - esperado_en_caja
+                if diferencia == 0: st.success("✅ ¡Caja cuadrada perfectamente!")
+                elif diferencia > 0: st.warning(f"⚠️ Sobrante en caja: +${diferencia:,.1f}")
+                else: st.error(f"❌ Faltante en caja: ${diferencia:,.1f}")
+
+        st.divider()
+        try:
+            ordenes_admin = agrupar_pedidos(ventas_data_global, None)
+            tot_neto = sum(p['total'] for p in ordenes_admin if "cancelado" not in p['estado'].lower() and "caja" not in p['estado'].lower() and "pendiente" not in p['estado'].lower() and "fiado" not in p['pago'].lower() and "cuenta" not in p['pago'].lower() and "abono" not in p['estado'].lower())
+            st.metric("Recaudación Neta (Cobrada)", f"${tot_neto:,.1f}")
+        except Exception as e: st.error(f"Error: {e}")
+    idx += 1
+
+# =======================================================
+# PESTAÑA 7: REPORTES PRO (CON MÓDULO DE STOCK)
+# =======================================================
+if st.session_state.rol_logueado == "Admin":
+    with tabs[idx]:
+        st.write("### 📈 Reportes Pro y Analítica Financiera")
+        try:
+            ordenes_admin = agrupar_pedidos(ventas_data_global, None)
+            pagos_resumen, vendedores_resumen, stock_resumen = {}, {}, {}
+            
+            for p in ordenes_admin:
+                est = p['estado'].lower()
+                if "cancelado" not in est and "caja" not in est and "pendiente" not in est and "abono" not in est:
+                    pago_tipo = p['pago'] if p['pago'] else "No especificado"
+                    pagos_resumen[pago_tipo] = pagos_resumen.get(pago_tipo, 0.0) + p['total']
+                    
+                    vend = p['vendedor'] if p['vendedor'] else "Desconocido"
+                    vendedores_resumen[vend] = vendedores_resumen.get(vend, 0.0) + p['total']
+                    
+                if "cancelado" not in est:
+                    for item in p['items']:
+                        prod_n = item['producto']
+                        stock_resumen[prod_n] = stock_resumen.get(prod_n, 0.0) + item['cantidad']
+            
+            st.subheader("📦 Movimiento de Stock (Productos Más Vendidos)")
+            if stock_resumen:
+                df_stock = pd.DataFrame(list(stock_resumen.items()), columns=["Producto", "Volumen de Venta (Kg/Un)"])
+                df_stock = df_stock.sort_values(by="Volumen de Venta (Kg/Un)", ascending=False).reset_index(drop=True)
+                st.dataframe(df_stock, use_container_width=True)
+            else:
+                st.info("Aún no hay movimientos de productos para calcular el stock.")
+            
+            st.divider()
+            
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                st.subheader("💳 Por Forma de Pago")
+                if pagos_resumen: st.dataframe(pd.DataFrame(list(pagos_resumen.items()), columns=["Forma", "Total"]).assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True)
+            with col_r2:
+                st.subheader("👨‍💼 Por Vendedor")
+                if vendedores_resumen: st.dataframe(pd.DataFrame(list(vendedores_resumen.items()), columns=["Vendedor", "Total"]).assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True)
+        except Exception as e: st.error(f"Error: {e}")
+    idx += 1
+
+# =======================================================
+# PESTAÑA 8: REPORTES PRO (SALDOS PENDIENTES)
+# =======================================================
+if st.session_state.rol_logueado == "Admin":
+    with tabs[idx]:
+        st.write("### 📥 Reporte de Saldos Pendientes (Descargable)")
         
         col_ref1, _ = st.columns([1, 3])
         with col_ref1:
@@ -1194,168 +1353,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     csv_l = df_l.to_csv(index=False).encode('utf-8')
                     st.download_button("📥 Descargar Saldos Locales (CSV)", csv_l, "saldos_locales.csv", "text/csv")
                     
-        except Exception as e: st.error(f"Error: {e}")
-    idx += 1
-
-# =======================================================
-# PESTAÑA 6: ENTREGAS A DOMICILIO
-# =======================================================
-if st.session_state.rol_logueado in ["Admin", "Cajero"]:
-    with tabs[idx]:
-        st.write("### 🛵 Control de Entregas a Domicilio (Logística)")
-        
-        col_ent1, col_ent2 = st.columns([1, 3])
-        with col_ent1:
-            if st.button("🔄 Refrescar Entregas"):
-                limpiar_cache_ventas()
-                st.rerun()
-
-        try:
-            todas = agrupar_pedidos(ventas_data_global)
-            
-            ent_pendientes = [e for e in todas if "entregado" not in e['estado'].lower() and "cancelado" not in e['estado'].lower() and e["direccion"].strip() != ""]
-            
-            hoy_str = datetime.now(TZ_UY).strftime("%d/%m/%Y")
-            ent_hoy = [e for e in todas if "entregado" in e['estado'].lower() and e["direccion"].strip() != "" and e['fecha'] == hoy_str]
-
-            st.write("#### 🚚 Pendientes de Llevar")
-            if not ent_pendientes: st.info("No hay entregas pendientes por llevar.")
-            else:
-                tabla_ent = []
-                for ent in ent_pendientes:
-                    tabla_ent.append({
-                        "Cliente": ent['cliente'],
-                        "Dirección": ent['direccion'],
-                        "Monto": f"${ent['total']:,.1f}"
-                    })
-                st.dataframe(pd.DataFrame(tabla_ent), use_container_width=True)
-                
-                st.write("#### Acciones de Logística:")
-                sel_ent = st.selectbox("Seleccionar entrega:", ["Seleccionar..."] + [f"{e['cliente']} - {e['direccion']} (ID {e['filas'][0]})" for e in ent_pendientes], key="sel_ent_box")
-                if sel_ent != "Seleccionar...":
-                    id_e = int(sel_ent.split("(ID ")[1].replace(")", ""))
-                    ent_sel = next(x for x in ent_pendientes if x['filas'][0] == id_e)
-                    
-                    c_e1, c_e2 = st.columns(2)
-                    with c_e1:
-                        if st.button("🛵 Marcar como Entregado", type="primary", use_container_width=True):
-                            gc = conectar_google()
-                            ws = gc.open_by_url(link_excel).worksheet("Registro de Ventas")
-                            col_e = chr(65 + ent_sel['idx_est'])
-                            
-                            nuevo_est = "Entregado"
-                            if "Pendiente Pago" in ent_sel['estado']: nuevo_est = "Entregado (Pendiente Pago)"
-                            elif "Cuenta" in ent_sel['estado'] or "Fiado" in ent_sel['estado']: nuevo_est = "Entregado (A Cuenta)"
-                            if "Web" in ent_sel['estado']: nuevo_est = "Web - " + nuevo_est
-                            
-                            ws.batch_update([{'range': f'{col_e}{f}', 'values': [[nuevo_est]]} for f in ent_sel["filas"]])
-                            limpiar_cache_ventas()
-                            time.sleep(1)
-                            st.success("✅ Marcado como Entregado en el sistema.")
-                            st.rerun()
-                    with c_e2:
-                        cli_nombre = ent_sel['cliente']
-                        link_wsp = f"https://wa.me/{limpiar_y_formatear_celular(ent_sel['celular'])}?text={urllib.parse.quote('Hola ' + cli_nombre + '. Tu pedido va en camino a tu domicilio.')}"
-                        st.link_button("📲 Avisar 'Va en Camino'", link_wsp, use_container_width=True)
-
-            st.divider()
-            st.write(f"#### ✅ Resumen Entregados Hoy ({hoy_str})")
-            if not ent_hoy: st.info("Aún no has registrado entregas hoy.")
-            else:
-                tabla_hoy = []
-                for eh in ent_hoy:
-                    tabla_hoy.append({
-                        "Cliente": eh['cliente'],
-                        "Dirección": eh['direccion'],
-                        "Estado Final": eh['estado']
-                    })
-                st.dataframe(pd.DataFrame(tabla_hoy), use_container_width=True)
-
-        except Exception as e: st.error(f"Error: {e}")
-    idx += 1
-
-# =======================================================
-# PESTAÑA 7: PANEL ADMIN
-# =======================================================
-if st.session_state.rol_logueado == "Admin":
-    with tabs[idx]:
-        st.write("### 📊 Panel Admin y Arqueo de Caja")
-        
-        with st.expander("🔒 Arqueo y Auditoría de Caja (Efectivo Inicial y Final)"):
-            ef_inicial = st.number_input("Efectivo Inicial en Caja (Fondo de cambio $):", min_value=0.0, step=100.0, value=st.session_state.get('ef_inicial', 0.0))
-            st.session_state.ef_inicial = ef_inicial
-            efectivo_sistema = 0.0
-            try:
-                for row in ventas_data_global[1:]:
-                    if len(row) > 9 and row[0] == datetime.now(TZ_UY).strftime("%d/%m/%Y"):
-                        pago_v = str(row[8]).lower() if len(row) > 8 else ""
-                        est_v = str(row[10]).lower() if len(row) > 10 else ""
-                        if "efectivo" in pago_v and "cancelado" not in est_v:
-                            try: efectivo_sistema += float(str(row[6]).replace("$","").replace(",","."))
-                            except: pass
-            except: pass
-            
-            esperado_en_caja = ef_inicial + efectivo_sistema
-            st.write(f"💵 **Efectivo esperado en caja (Inicial + Ventas Efectivo):** ${esperado_en_caja:,.1f}")
-            ef_final = st.number_input("Efectivo Final (Conteo físico en caja $):", min_value=0.0, step=100.0, key="ef_fin_input")
-            if ef_final > 0:
-                diferencia = ef_final - esperado_en_caja
-                if diferencia == 0: st.success("✅ ¡Caja cuadrada perfectamente!")
-                elif diferencia > 0: st.warning(f"⚠️ Sobrante en caja: +${diferencia:,.1f}")
-                else: st.error(f"❌ Faltante en caja: ${diferencia:,.1f}")
-
-        st.divider()
-        try:
-            ordenes_admin = agrupar_pedidos(ventas_data_global, None)
-            tot_neto = sum(p['total'] for p in ordenes_admin if "cancelado" not in p['estado'].lower() and "caja" not in p['estado'].lower() and "pendiente" not in p['estado'].lower() and "fiado" not in p['pago'].lower() and "cuenta" not in p['pago'].lower() and "abono" not in p['estado'].lower())
-            st.metric("Recaudación Neta (Cobrada)", f"${tot_neto:,.1f}")
-        except Exception as e: st.error(f"Error: {e}")
-    idx += 1
-
-# =======================================================
-# PESTAÑA 8: REPORTES PRO (CON MÓDULO DE STOCK)
-# =======================================================
-if st.session_state.rol_logueado == "Admin":
-    with tabs[idx]:
-        st.write("### 📈 Reportes Pro y Analítica Financiera")
-        try:
-            ordenes_admin = agrupar_pedidos(ventas_data_global, None)
-            pagos_resumen, vendedores_resumen, stock_resumen = {}, {}, {}
-            
-            for p in ordenes_admin:
-                est = p['estado'].lower()
-                if "cancelado" not in est and "caja" not in est and "pendiente" not in est and "abono" not in est:
-                    pago_tipo = p['pago'] if p['pago'] else "No especificado"
-                    pagos_resumen[pago_tipo] = pagos_resumen.get(pago_tipo, 0.0) + p['total']
-                    
-                    vend = p['vendedor'] if p['vendedor'] else "Desconocido"
-                    vendedores_resumen[vend] = vendedores_resumen.get(vend, 0.0) + p['total']
-                    
-                # Cálculos de stock (Ventas reales sin cancelar)
-                if "cancelado" not in est:
-                    for item in p['items']:
-                        prod_n = item['producto']
-                        stock_resumen[prod_n] = stock_resumen.get(prod_n, 0.0) + item['cantidad']
-            
-            # --- MÓDULO DE STOCK (Volumen de Ventas) ---
-            st.subheader("📦 Movimiento de Stock (Productos Más Vendidos)")
-            if stock_resumen:
-                df_stock = pd.DataFrame(list(stock_resumen.items()), columns=["Producto", "Volumen de Venta (Kg/Un)"])
-                df_stock = df_stock.sort_values(by="Volumen de Venta (Kg/Un)", ascending=False).reset_index(drop=True)
-                st.dataframe(df_stock, use_container_width=True)
-            else:
-                st.info("Aún no hay movimientos de productos para calcular el stock.")
-            
-            st.divider()
-            
-            # --- MÓDULOS FINANCIEROS ---
-            col_r1, col_r2 = st.columns(2)
-            with col_r1:
-                st.subheader("💳 Por Forma de Pago")
-                if pagos_resumen: st.dataframe(pd.DataFrame(list(pagos_resumen.items()), columns=["Forma", "Total"]).assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True)
-            with col_r2:
-                st.subheader("👨‍💼 Por Vendedor")
-                if vendedores_resumen: st.dataframe(pd.DataFrame(list(vendedores_resumen.items()), columns=["Vendedor", "Total"]).assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True)
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
