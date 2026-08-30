@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y BOTÓN FLOTANTE ESTILO APP
+# 1. CONFIGURACIÓN INICIAL Y CSS
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -18,23 +18,17 @@ st.markdown("""
     div.row-widget.stRadio > div > label { background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; font-size: 16px; border: 2px solid #ddd; cursor: pointer; margin: 2px; }
     div.row-widget.stRadio > div > label:hover { border-color: #66BB6A; background-color: #e8f5e9; }
     
-    html, body, [data-testid="stAppViewContainer"], .stApp {
+    html, body, [data-testid="stAppViewContainer"] {
         overscroll-behavior-y: none !important;
         -webkit-overflow-scrolling: touch;
-        overflow-x: hidden !important; 
     }
     
-    /* Colchón inferior generoso para que el contenido no quede tapado por el botón flotante ni por Netlify */
-    [data-testid="stMainBlockContainer"] { 
-        padding-bottom: 180px !important; 
-        overflow-x: hidden !important;
-    }
+    [data-testid="stMainBlockContainer"] { padding-bottom: 180px !important; }
     
     [data-testid="stSidebar"], [data-testid="collapsedControl"], footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
     [data-testid="StyledFullScreenButton"] { display: none !important; visibility: hidden !important; }
     
-    /* BOTONES PRINCIPALES EN VERDE CLARO Y FRESCO (#66BB6A) */
     button[kind="primary"] {
         background-color: #66BB6A !important;
         border-color: #66BB6A !important;
@@ -49,7 +43,6 @@ st.markdown("""
         div[data-testid="stHorizontalBlock"] {
             flex-direction: row !important;
             flex-wrap: nowrap !important;
-            width: 100% !important;
             gap: 5px !important;
         }
         div[data-testid="column"] {
@@ -337,25 +330,7 @@ if "feria" in query_params:
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
             
-            # --- BOTÓN FLOTANTE SUPERIOR / DE ACCESO RÁPIDO AL CARRITO ---
-            st.markdown("""
-                <style>
-                .floating-cart {
-                    position: fixed;
-                    bottom: 65px;
-                    right: 15px;
-                    z-index: 999;
-                    background-color: #66BB6A;
-                    color: white;
-                    padding: 12px 20px;
-                    border-radius: 30px;
-                    font-weight: bold;
-                    box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
-                    text-align: center;
-                }
-                </style>
-            """, unsafe_allow_html=True)
-            
+            # --- BOTÓN DE ACCESO RÁPIDO AL CARRITO (ARRIBA) ---
             if st.button("🛒 VER CARRITO Y REVISAR ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
@@ -713,8 +688,55 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 st.divider()
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
-                st.markdown("Puedes sumar con las flechas o tocar la casilla para escribir el número.")
                 
+                # --- BOTÓN DE ACCESO RÁPIDO AL CARRITO (ARRIBA EN VENTA LOCAL) ---
+                if st.button("🚀 ENVIAR A CAJA (Acceso Rápido)", type="primary", use_container_width=True):
+                    tot_c_rapido = 0.0
+                    carrito_vend_rapido = []
+                    if 'q_loc' in st.session_state:
+                        for p, dict_q in st.session_state.q_loc.items():
+                            m = MEDIDAS.get(p, "kg")
+                            c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                            if c > 0:
+                                pr_orig = PRECIOS.get(p, 0)
+                                desc_p = DESCUENTOS.get(p, 0)
+                                pr_fin = pr_orig * (1 - desc_p/100)
+                                tot_c_rapido += c * pr_fin
+                                carrito_vend_rapido.append({
+                                    "producto": NOMBRES.get(p, p),
+                                    "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
+                                    "subtotal": c * pr_fin, "ahorro": c * (pr_orig - pr_fin), "tipo": "Propio"
+                                })
+                    
+                    if not st.session_state.cli_nombre:
+                        st.error("⚠️ Falta el nombre del cliente en el Paso 1.")
+                    elif tot_c_rapido <= 0:
+                        st.warning("⚠️ No has seleccionado ningún producto.")
+                    else:
+                        ahora = datetime.now(TZ_UY)
+                        cel_f = limpiar_y_formatear_celular(st.session_state.cli_celular)
+                        cli_nombre_final = st.session_state.cli_nombre.strip().upper()
+                                
+                        items_json = json.dumps(carrito_vend_rapido)
+                        filas = []
+                        for item in carrito_vend_rapido:
+                            filas.append([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cli_nombre_final, item['producto'], item['cantidad'], item['subtotal'], cel_f, "Efectivo", "En Caja", "", item.get('ahorro', 0), items_json])
+                        
+                        gc = conectar_google()
+                        gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas").append_rows(filas)
+                        limpiar_cache_ventas()
+                        time.sleep(1)
+                        
+                        det = " | ".join([f"{r['producto']}: {r['cantidad_txt']}" for r in carrito_vend_rapido])
+                        st.session_state.msg_vendedor = "✅ ¡Pedido enviado a la Caja con éxito!"
+                        num_cajero = limpiar_y_formatear_celular(celular_feriante_local)
+                        if not num_cajero: num_cajero = "59893343092"
+                        st.session_state.link_vendedor = f"https://wa.me/{num_cajero}?text={urllib.parse.quote(f'💳 *NUEVO PEDIDO EN CAJA*\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\n👤 Cliente: {cli_nombre_final}\n💰 Total: ${tot_c_rapido:,.1f}\n📦 Detalle: {det}')}"
+                        
+                        st.session_state.v_rk += 1
+                        st.rerun()
+
+                st.markdown("---")
                 if 'q_loc' not in st.session_state:
                     st.session_state.q_loc = {p: {'kg_un': 0, 'gr': 0.0} for p in productos_ord_loc}
                 
@@ -773,7 +795,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 if tot_ahor > 0: st.success(f"🎉 Ahorro Total del Cliente: ${tot_ahor:,.1f}")
                 st.divider()
 
-                if st.button("🚀 Enviar a Caja", type="primary", use_container_width=True):
+                if st.button("🚀 Enviar a Caja (Final)", type="primary", use_container_width=True):
                     if not st.session_state.cli_nombre:
                         st.error("⚠️ Falta el nombre del cliente en el Paso 1.")
                     elif tot_c <= 0:
