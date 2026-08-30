@@ -185,12 +185,16 @@ def cargar_datos_feria(link):
                 config[row[0].strip().lower()] = row[1].strip()
     except: pass
         
-    productos, precios, descuentos, medidas, nombres_planos, medidas_planas = [], {}, {}, {}, {}, {}
+    productos, precios, descuentos, medidas, nombres_planos, medidas_planas, stock_inicial = [], {}, {}, {}, {}, {}, {}
     try:
         ws_prod = sh.worksheet("Productos")
         filas_p = ws_prod.get_all_values()
         cabeceras_p = [str(c).strip().lower() for c in filas_p[0]]
+        
         idx_medida = cabeceras_p.index('medida') if 'medida' in cabeceras_p else 6
+        idx_stock = cabeceras_p.index('stock') if 'stock' in cabeceras_p else (-1)
+        if idx_stock == -1 and 'stock inicial' in cabeceras_p:
+            idx_stock = cabeceras_p.index('stock inicial')
         
         for fila in filas_p[1:]:
             if len(fila) >= 3 and fila[1].strip() and fila[1].strip().lower() != "producto":  
@@ -210,6 +214,11 @@ def cargar_datos_feria(link):
                 if len(fila) > idx_medida and str(fila[idx_medida]).strip():
                     medida = str(fila[idx_medida]).strip().lower()
                 
+                s_ini = 0.0
+                if idx_stock != -1 and len(fila) > idx_stock and str(fila[idx_stock]).strip():
+                    try: s_ini = float(str(fila[idx_stock]).replace(",", "."))
+                    except: pass
+                
                 prod_full = f"{emoji} {nombre}"
                 productos.append(prod_full)
                 precios[prod_full] = precio
@@ -221,6 +230,7 @@ def cargar_datos_feria(link):
                 nombres_planos[prod_full] = nombre
                 medidas_planas[nombre] = medida
                 medidas_planas[prod_full] = medida
+                stock_inicial[prod_full] = s_ini
     except: pass
 
     clientes_dict = {}
@@ -234,7 +244,7 @@ def cargar_datos_feria(link):
                 clientes_dict[nombre_c] = celular_c
     except: pass
     
-    return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, medidas_planas
+    return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, medidas_planas, stock_inicial
 
 # ==========================================
 # 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS)
@@ -252,7 +262,7 @@ if "feria" in query_params:
         st.stop()
     
     try:
-        productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, _ = cargar_datos_feria(link_excel)
+        productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, _, _ = cargar_datos_feria(link_excel)
         nombre_feria = config.get("nombre_empresa", config.get("nombre", "Nuestra Feria"))
         celular_feriante = config.get("celular_feriante", config.get("celular_contacto", "59893343092"))
         bienvenida_dia = config.get("bienvenida", config.get("ofertas", config.get("banner", "")))
@@ -540,8 +550,9 @@ if st.session_state.usuario_logueado is None:
         else: st.error("❌ Código inválido.")
     st.stop()
 
+# Obtener datos globales y desempaquetar el STOCK_INICIAL
 ventas_data_global = obtener_ventas(st.session_state.link_feria)
-PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG, MEDIDAS_PLANAS = cargar_datos_feria(st.session_state.link_feria)
+PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG, MEDIDAS_PLANAS, STOCK_INICIAL = cargar_datos_feria(st.session_state.link_feria)
 nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre", "La Feria"))
 celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_contacto", "59893343092"))
 
@@ -562,7 +573,6 @@ st.title(f"🏢 {nombre_empresa}")
 # ==========================================
 # 5. PESTAÑAS Y ROLES ORDENADOS
 # ==========================================
-# Aquí organizamos las pestañas. Colocamos Reporte de Saldos Pendientes al final con los Pro
 tabs_nombres = []
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]: 
     tabs_nombres.append("📝 Tomar Pedido")
@@ -1239,7 +1249,7 @@ if st.session_state.rol_logueado == "Admin":
     idx += 1
 
 # =======================================================
-# PESTAÑA 7: REPORTES PRO (CON MÓDULO DE STOCK)
+# PESTAÑA 7: REPORTES PRO (CON MÓDULO DE STOCK ORDENADO)
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
@@ -1251,10 +1261,15 @@ if st.session_state.rol_logueado == "Admin":
             for p in ordenes_admin:
                 est = p['estado'].lower()
                 if "cancelado" not in est and "caja" not in est and "pendiente" not in est and "abono" not in est:
-                    pago_tipo = p['pago'] if p['pago'] else "No especificado"
-                    pagos_resumen[pago_tipo] = pagos_resumen.get(pago_tipo, 0.0) + p['total']
                     
-                    vend = p['vendedor'] if p['vendedor'] else "Desconocido"
+                    # Limpiamos y clasificamos si es Web o Local para que no se mezcle
+                    pago_bruto = str(p['pago']).strip().title() if p['pago'] else "No especificado"
+                    origen = " (Web)" if "web" in est else " (Local)"
+                    concepto = pago_bruto + origen
+                    
+                    pagos_resumen[concepto] = pagos_resumen.get(concepto, 0.0) + p['total']
+                    
+                    vend = str(p['vendedor']).strip().title() if p['vendedor'] else "Desconocido"
                     vendedores_resumen[vend] = vendedores_resumen.get(vend, 0.0) + p['total']
                     
                 if "cancelado" not in est:
@@ -1262,23 +1277,47 @@ if st.session_state.rol_logueado == "Admin":
                         prod_n = item['producto']
                         stock_resumen[prod_n] = stock_resumen.get(prod_n, 0.0) + item['cantidad']
             
-            st.subheader("📦 Movimiento de Stock (Productos Más Vendidos)")
-            if stock_resumen:
-                df_stock = pd.DataFrame(list(stock_resumen.items()), columns=["Producto", "Volumen de Venta (Kg/Un)"])
-                df_stock = df_stock.sort_values(by="Volumen de Venta (Kg/Un)", ascending=False).reset_index(drop=True)
-                st.dataframe(df_stock, use_container_width=True)
-            else:
-                st.info("Aún no hay movimientos de productos para calcular el stock.")
+            # --- MÓDULO DE CONTROL DE STOCK Y ALERTAS ROJAS ---
+            st.subheader("📦 Control de Stock y Alertas")
+            
+            tabla_stock = []
+            for p_name in productos_ord_loc:
+                vendido = stock_resumen.get(p_name, 0.0)
+                s_ini = STOCK_INICIAL.get(p_name, 0.0)
+                s_fin = s_ini - vendido
+                tabla_stock.append({
+                    "Producto": p_name,
+                    "Stock Inicial": s_ini,
+                    "Vendido": vendido,
+                    "Stock Final": s_fin
+                })
+            
+            df_stock_ctrl = pd.DataFrame(tabla_stock)
+            
+            # Filtro inteligente de Alertas Rojas (Si el final es menor a 5 y el inicial no era cero)
+            df_alertas = df_stock_ctrl[(df_stock_ctrl["Stock Inicial"] > 0) & (df_stock_ctrl["Stock Final"] <= 5)]
+            
+            if not df_alertas.empty:
+                st.error("⚠️ **¡ATENCIÓN! PRODUCTOS CON STOCK BAJO (5 o menos):**")
+                st.dataframe(df_alertas[["Producto", "Stock Final"]].style.applymap(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True)
+                
+            st.write("📊 **Inventario Completo (Alfabético):**")
+            st.dataframe(df_stock_ctrl, use_container_width=True)
             
             st.divider()
             
+            # --- MÓDULOS FINANCIEROS ORDENADOS ALFABÉTICAMENTE ---
             col_r1, col_r2 = st.columns(2)
             with col_r1:
-                st.subheader("💳 Por Forma de Pago")
-                if pagos_resumen: st.dataframe(pd.DataFrame(list(pagos_resumen.items()), columns=["Forma", "Total"]).assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True)
+                st.subheader("💳 Por Forma de Pago y Origen")
+                if pagos_resumen: 
+                    df_pagos = pd.DataFrame(list(pagos_resumen.items()), columns=["Concepto / Forma", "Total"]).sort_values("Concepto / Forma")
+                    st.dataframe(df_pagos.assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True, hide_index=True)
             with col_r2:
                 st.subheader("👨‍💼 Por Vendedor")
-                if vendedores_resumen: st.dataframe(pd.DataFrame(list(vendedores_resumen.items()), columns=["Vendedor", "Total"]).assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True)
+                if vendedores_resumen: 
+                    df_vend = pd.DataFrame(list(vendedores_resumen.items()), columns=["Vendedor", "Total"]).sort_values("Vendedor")
+                    st.dataframe(df_vend.assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True, hide_index=True)
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
@@ -1301,7 +1340,7 @@ if st.session_state.rol_logueado == "Admin":
             
             resumen_saldos = {}
             for o in fiados_activos:
-                cli = o['cliente']
+                cli = str(o['cliente']).strip().title()
                 if cli not in resumen_saldos:
                     resumen_saldos[cli] = {"Total": 0.0, "Pagado": 0.0, "Tipos": set(), "EsWeb": False}
                 
@@ -1335,20 +1374,21 @@ if st.session_state.rol_logueado == "Admin":
                     if d["EsWeb"]: tabla_w.append(row)
                     else: tabla_l.append(row)
             
-            df_w = pd.DataFrame(tabla_w) if tabla_w else pd.DataFrame(columns=["Cliente", "Detalle Deuda", "Total Pedido", "Pagado", "Saldo Pendiente"])
-            df_l = pd.DataFrame(tabla_l) if tabla_l else pd.DataFrame(columns=["Cliente", "Detalle Deuda", "Total Pedido", "Pagado", "Saldo Pendiente"])
+            # Las ordenamos alfabéticamente por cliente para que sea impecable buscar
+            df_w = pd.DataFrame(tabla_w).sort_values("Cliente") if tabla_w else pd.DataFrame(columns=["Cliente", "Detalle Deuda", "Total Pedido", "Pagado", "Saldo Pendiente"])
+            df_l = pd.DataFrame(tabla_l).sort_values("Cliente") if tabla_l else pd.DataFrame(columns=["Cliente", "Detalle Deuda", "Total Pedido", "Pagado", "Saldo Pendiente"])
             
             c1, c2 = st.columns(2)
             with c1:
                 st.subheader("🌐 Saldos Web")
-                st.dataframe(df_w, use_container_width=True)
+                st.dataframe(df_w, use_container_width=True, hide_index=True)
                 if not df_w.empty:
                     csv_w = df_w.to_csv(index=False).encode('utf-8')
                     st.download_button("📥 Descargar Saldos Web (CSV)", csv_w, "saldos_web.csv", "text/csv")
                     
             with c2:
                 st.subheader("🏪 Saldos Locales")
-                st.dataframe(df_l, use_container_width=True)
+                st.dataframe(df_l, use_container_width=True, hide_index=True)
                 if not df_l.empty:
                     csv_l = df_l.to_csv(index=False).encode('utf-8')
                     st.download_button("📥 Descargar Saldos Locales (CSV)", csv_l, "saldos_locales.csv", "text/csv")
