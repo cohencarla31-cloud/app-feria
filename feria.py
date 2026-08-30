@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y BLOQUEOS AGRESIVOS
+# 1. CONFIGURACIÓN INICIAL Y CSS "ANTI-SCROLL LATERAL"
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -18,35 +18,54 @@ st.markdown("""
     div.row-widget.stRadio > div > label { background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; font-size: 16px; border: 2px solid #ddd; cursor: pointer; margin: 2px; }
     div.row-widget.stRadio > div > label:hover { border-color: #ff4b4b; background-color: #ffcccc; }
     
-    html, body, [data-testid="stAppViewContainer"] {
+    /* BLOQUEO ABSOLUTO DE SCROLL LATERAL Y PULL-TO-REFRESH */
+    html, body, [data-testid="stAppViewContainer"], .stApp {
         overscroll-behavior-y: none !important;
         -webkit-overflow-scrolling: touch;
+        overflow-x: hidden !important; 
     }
     
-    [data-testid="stMainBlockContainer"] { padding-bottom: 140px !important; }
+    [data-testid="stMainBlockContainer"] { 
+        padding-bottom: 140px !important; 
+        overflow-x: hidden !important;
+    }
     
     [data-testid="stSidebar"], [data-testid="collapsedControl"], footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
     [data-testid="StyledFullScreenButton"] { display: none !important; visibility: hidden !important; }
     
-    /* CSS PARA OBLIGAR AL CELULAR A MOSTRAR 2 COLUMNAS SIN SCROLL LATERAL */
+    /* TRUCO PARA CELULARES: CAJONES GRISES ANGOSTOS Y JUNTOS */
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"] {
             flex-direction: row !important;
             flex-wrap: nowrap !important;
-            gap: 8px !important;
+            width: 100% !important;
+            gap: 4px !important;
         }
         div[data-testid="column"] {
             min-width: 0 !important;
+            padding: 0 !important;
         }
-        /* Achicar los botones + y - para que no choquen */
+        
+        /* Achicamos el fondo gris para que no sea largo innecesariamente */
+        div[data-testid="stNumberInput"] {
+            max-width: 110px !important;
+            margin: 0 auto !important; /* Los centra y los acerca */
+        }
         div[data-baseweb="input"] button {
-            width: 2.2rem !important;
+            width: 25px !important;
+            padding: 0 !important;
         }
-        /* Letra de las etiquetas un poco más chica */
         label[data-testid="stWidgetLabel"] p {
-            font-size: 13px !important;
-            color: #444 !important;
+            font-size: 12px !important;
+            text-align: center !important;
+            color: #555 !important;
+        }
+        /* Ajustar botones de Atrás y Revisar Carrito */
+        div[data-testid="stButton"] button {
+            padding: 8px 2px !important;
+            font-size: 14px !important;
+            width: 100% !important;
         }
     }
     </style>
@@ -343,7 +362,7 @@ if "feria" in query_params:
                 c1, c2 = st.columns(2)
                 with c1:
                     st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
-                        "Kg / Unid", min_value=0, step=1, 
+                        "Kg/Unid", min_value=0, step=1, 
                         value=int(st.session_state.q_web[prod_full]['kg_un']), 
                         key=f"w_k_{prod_full}_{st.session_state.web_rk}"
                     )
@@ -394,13 +413,16 @@ if "feria" in query_params:
             
             tot_web = 0.0
             idx_to_del = []
+            
+            # DISEÑO 2 COLUMNAS COMPACTO: Texto a la izquierda, la ❌ a la derecha pegada
             for idx_cw, itw in enumerate(st.session_state.carrito_web):
-                c1, c2, c3 = st.columns([3, 1, 1])
-                with c1: st.write(f"• {itw['producto']} ({itw['cantidad_txt']})")
-                with c2: st.write(f"**${itw['subtotal']:,.1f}**")
-                with c3:
-                    if st.button("❌ Quitar", key=f"del_w3_{idx_cw}"):
+                c1, c2 = st.columns([4, 1])
+                with c1: 
+                    st.markdown(f"**{itw['producto']}** ({itw['cantidad_txt']}) &nbsp; <span style='color:#2e7b32'>**${itw['subtotal']:,.1f}**</span>", unsafe_allow_html=True)
+                with c2:
+                    if st.button("❌", key=f"del_w3_{idx_cw}"):
                         idx_to_del.append(idx_cw)
+                st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
                 tot_web += itw['subtotal']
             
             if idx_to_del:
@@ -689,7 +711,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     c1, c2 = st.columns(2)
                     with c1:
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                            "Kg / Unid", min_value=0, step=1, 
+                            "Kg/Unid", min_value=0, step=1, 
                             key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
                             value=int(st.session_state.q_loc[prod_full]['kg_un'])
                         )
@@ -1316,9 +1338,11 @@ if st.session_state.rol_logueado == "Admin":
             df_alertas = df_stock_ctrl[(df_stock_ctrl["Stock Inicial"] > 0) & (df_stock_ctrl["Stock Final"] <= 5)]
             
             if not df_alertas.empty:
-                # SE ELIMINÓ EL STYLER.APPLYMAP para evitar errores de compatibilidad con Pandas
                 st.error("⚠️ **¡ATENCIÓN! PRODUCTOS CON STOCK BAJO (5 o menos):**")
-                st.dataframe(df_alertas[["Producto", "Stock Final"]], use_container_width=True, hide_index=True)
+                try:
+                    st.dataframe(df_alertas[["Producto", "Stock Final"]].style.map(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True, hide_index=True)
+                except AttributeError:
+                    st.dataframe(df_alertas[["Producto", "Stock Final"]].style.applymap(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True, hide_index=True)
                 
             st.write("📊 **Inventario Completo:**")
             st.dataframe(df_stock_ctrl, use_container_width=True, hide_index=True)
