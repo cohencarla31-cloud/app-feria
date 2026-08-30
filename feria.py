@@ -1272,17 +1272,41 @@ if st.session_state.rol_logueado == "Admin":
                     vend = str(p['vendedor']).strip().title() if p['vendedor'] else "Desconocido"
                     vendedores_resumen[vend] = vendedores_resumen.get(vend, 0.0) + p['total']
                     
+                # Cálculos de stock con extractor inteligente
                 if "cancelado" not in est:
-                    for item in p['items']:
-                        prod_n = item['producto']
-                        stock_resumen[prod_n] = stock_resumen.get(prod_n, 0.0) + item['cantidad']
+                    items_to_process = p['items']
+                    try:
+                        js = json.loads(p['json'])
+                        if js and isinstance(js, list): items_to_process = js
+                    except: pass
+                    
+                    for item in items_to_process:
+                        prod_raw = str(item.get('producto', ''))
+                        prod_clean = prod_raw.replace("(Web Ajustado)", "").replace("(Propio)", "").replace("(Ajeno)", "").strip()
+                        
+                        if " | " in prod_clean:
+                            partes = prod_clean.split(" | ")
+                            for parte in partes:
+                                if ":" in parte:
+                                    p_name_raw = parte.split(":")[0].strip()
+                                    qty_raw = parte.split(":")[1].replace("kg/un", "").replace("kg", "").replace("un", "").replace("gr", "").strip()
+                                    p_name_clean = NOMBRES.get(p_name_raw, p_name_raw)
+                                    try: stock_resumen[p_name_clean] = stock_resumen.get(p_name_clean, 0.0) + float(qty_raw)
+                                    except: pass
+                        else:
+                            if ":" in prod_clean: prod_clean = prod_clean.split(":")[0].strip()
+                            p_name_clean = NOMBRES.get(prod_clean, prod_clean)
+                            c_val = str(item.get('cantidad', '0')).replace("kg", "").replace("un", "").replace("gr", "").strip()
+                            try: stock_resumen[p_name_clean] = stock_resumen.get(p_name_clean, 0.0) + float(c_val)
+                            except: pass
             
             # --- MÓDULO DE CONTROL DE STOCK Y ALERTAS ROJAS ---
             st.subheader("📦 Control de Stock y Alertas")
             
             tabla_stock = []
             for p_name in productos_ord_loc:
-                vendido = stock_resumen.get(p_name, 0.0)
+                nombre_plano = NOMBRES.get(p_name, p_name)
+                vendido = stock_resumen.get(nombre_plano, 0.0)
                 s_ini = STOCK_INICIAL.get(p_name, 0.0)
                 s_fin = s_ini - vendido
                 tabla_stock.append({
@@ -1293,16 +1317,14 @@ if st.session_state.rol_logueado == "Admin":
                 })
             
             df_stock_ctrl = pd.DataFrame(tabla_stock)
-            
-            # Filtro inteligente de Alertas Rojas (Si el final es menor a 5 y el inicial no era cero)
             df_alertas = df_stock_ctrl[(df_stock_ctrl["Stock Inicial"] > 0) & (df_stock_ctrl["Stock Final"] <= 5)]
             
             if not df_alertas.empty:
                 st.error("⚠️ **¡ATENCIÓN! PRODUCTOS CON STOCK BAJO (5 o menos):**")
                 st.dataframe(df_alertas[["Producto", "Stock Final"]].style.applymap(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True)
                 
-            st.write("📊 **Inventario Completo (Alfabético):**")
-            st.dataframe(df_stock_ctrl, use_container_width=True)
+            st.write("📊 **Inventario Completo:**")
+            st.dataframe(df_stock_ctrl, use_container_width=True, hide_index=True)
             
             st.divider()
             
