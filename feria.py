@@ -492,14 +492,13 @@ if "usuario_logueado" not in st.session_state:
 
 if st.session_state.usuario_logueado is None:
     st.title("🔒 Ingreso al Sistema")
-    st.info("💡 Por seguridad, asegúrate de que tus contraseñas en el Google Sheet sean combinaciones seguras (letras y números).")
     
     empresa_intento = st.text_input("Código de Empresa:", key="emp_norm").strip().upper()
     usuario_intento = st.text_input("Usuario:", key="usu_norm").strip()
     clave_intento = st.text_input("Contraseña:", type="password", key="cla_norm")
     
     if st.button("🚪 Ingresar", type="primary"):
-        # ESCUDO ANTI-BOTS (Fuerza Bruta): Pausa obligatoria de 1.5 segundos
+        # ESCUDO ANTI-BOTS: Pausa invisible de seguridad contra hackeo por fuerza bruta
         time.sleep(1.5)
         
         if empresa_intento == "MASTER" and clave_intento == "MiClaveSuperSecreta2026":
@@ -527,7 +526,6 @@ if st.session_state.usuario_logueado is None:
                         col_rol = next((c for c in df_usuarios.columns if 'rol' in c.lower()), None)
                         
                         if col_usu and col_cla:
-                            # Match ESTRICTO que respeta mayúsculas y minúsculas en la contraseña
                             valido = df_usuarios[(df_usuarios[col_usu].str.lower() == usuario_intento.lower()) & (df_usuarios[col_cla] == clave_intento)]
                             if not valido.empty:
                                 st.session_state.usuario_logueado = usuario_intento
@@ -548,7 +546,6 @@ PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG, MEDIDAS
 nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre", "La Feria"))
 celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_contacto", "59893343092"))
 
-# Ordenar alfabéticamente ignorando emojis
 productos_ord_loc = sorted(PRODUCTOS, key=lambda x: NOMBRES.get(x, x).strip().lower())
 
 with st.sidebar:
@@ -579,7 +576,7 @@ if st.session_state.rol_logueado == "Admin":
     tabs_nombres.append("📊 Panel Admin")
     tabs_nombres.append("📈 Reportes Pro")
 
-# Pestaña extra para explicar el flujo a los empleados
+# Pestaña Guía de Uso
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     tabs_nombres.append("📖 Cómo Funciona")
 
@@ -591,7 +588,6 @@ idx = 0
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     with tabs[idx]:
-        # --- PANTALLA EXCLUSIVA DE ÉXITO (Sin Scroll) ---
         if 'msg_vendedor' in st.session_state and st.session_state.msg_vendedor:
             st.success(st.session_state.msg_vendedor)
             st.markdown("### ¡El pedido ya está en Caja! 💸")
@@ -605,7 +601,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 if 'q_loc' in st.session_state: del st.session_state.q_loc
                 st.rerun()
         
-        # --- PANTALLA NORMAL DE TOMAR PEDIDO ---
         else:
             if st.session_state.cliente_retomado_aviso:
                 st.warning(f"⚠️ **PROCESANDO AL CLIENTE:** `{st.session_state.cliente_retomado_aviso}`.")
@@ -722,7 +717,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 if tot_ahor > 0: st.success(f"🎉 Ahorro Total del Cliente: ${tot_ahor:,.1f}")
                 st.divider()
 
-                if st.button("🚀 Enviar a Caja (Final)", type="primary", use_container_width=True):
+                if st.button("🚀 Enviar a Caja", type="primary", use_container_width=True):
                     if not st.session_state.cli_nombre:
                         st.error("⚠️ Falta el nombre del cliente en el Paso 1.")
                     elif tot_c <= 0:
@@ -1318,23 +1313,42 @@ if st.session_state.rol_logueado == "Admin":
     idx += 1
 
 # =======================================================
-# PESTAÑA 8: REPORTES PRO
+# PESTAÑA 8: REPORTES PRO (CON MÓDULO DE STOCK)
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
         st.write("### 📈 Reportes Pro y Analítica Financiera")
         try:
             ordenes_admin = agrupar_pedidos(ventas_data_global, None)
-            pagos_resumen, vendedores_resumen = {}, {}
+            pagos_resumen, vendedores_resumen, stock_resumen = {}, {}, {}
             
             for p in ordenes_admin:
                 est = p['estado'].lower()
                 if "cancelado" not in est and "caja" not in est and "pendiente" not in est and "abono" not in est:
                     pago_tipo = p['pago'] if p['pago'] else "No especificado"
                     pagos_resumen[pago_tipo] = pagos_resumen.get(pago_tipo, 0.0) + p['total']
+                    
                     vend = p['vendedor'] if p['vendedor'] else "Desconocido"
                     vendedores_resumen[vend] = vendedores_resumen.get(vend, 0.0) + p['total']
+                    
+                # Cálculos de stock (Ventas reales sin cancelar)
+                if "cancelado" not in est:
+                    for item in p['items']:
+                        prod_n = item['producto']
+                        stock_resumen[prod_n] = stock_resumen.get(prod_n, 0.0) + item['cantidad']
             
+            # --- MÓDULO DE STOCK (Volumen de Ventas) ---
+            st.subheader("📦 Movimiento de Stock (Productos Más Vendidos)")
+            if stock_resumen:
+                df_stock = pd.DataFrame(list(stock_resumen.items()), columns=["Producto", "Volumen de Venta (Kg/Un)"])
+                df_stock = df_stock.sort_values(by="Volumen de Venta (Kg/Un)", ascending=False).reset_index(drop=True)
+                st.dataframe(df_stock, use_container_width=True)
+            else:
+                st.info("Aún no hay movimientos de productos para calcular el stock.")
+            
+            st.divider()
+            
+            # --- MÓDULOS FINANCIEROS ---
             col_r1, col_r2 = st.columns(2)
             with col_r1:
                 st.subheader("💳 Por Forma de Pago")
@@ -1355,21 +1369,22 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
         
         st.markdown("""
         **1. 🛍️ VENDEDOR (Tomar Pedido):**
-        * Busca al cliente, anota las cantidades (con las flechitas o escribiendo) y presiona **Enviar a Caja**.
-        * **Importante:** Apenas se envía, te aparecerá un botón verde para mandarle un WhatsApp al Cajero con el detalle. ¡Tócalo siempre!
+        * Busca al cliente, anota las cantidades y presiona **Enviar a Caja**.
+        * **Importante:** Apenas se envía, te aparecerá un botón verde para mandarle un WhatsApp al Cajero. ¡Tócalo siempre para avisar que hay un nuevo pedido esperando!
         
         **2. 🌐 PEDIDOS WEB (Clientes):**
         * Los clientes entran por tu enlace web, eligen sus verduras y envían el pedido. 
-        * En la pestaña **Ajustar Pedido Web**, el vendedor toma ese pedido original, pesa la mercadería real y ajusta los gramos exactos antes de enviarlo a Caja.
+        * En **Estado Pedidos Web**, el cajero puede ver esos pedidos al instante y mandarles un WhatsApp de "Pedido Recibido" al cliente para que se queden tranquilos de que ya se está procesando.
+        * En **Ajustar Pedido Web**, el vendedor toma ese pedido original, pesa la mercadería en la balanza y ajusta los gramos exactos antes de enviarlo a Caja para cobrar.
         
         **3. 💰 CAJERO (Cobrar):**
-        * En la pestaña **Caja y Cobro**, el cajero ve todos los pedidos listos (físicos y web).
-        * Selecciona el pedido, elige si pagan en Efectivo, Tarjeta o si lo dejan "A Cuenta" (Fiado). Al cerrar el cobro, le envía un WhatsApp automático de recibo al cliente.
+        * En **Caja y Cobro**, el cajero ve todos los pedidos listos (físicos y web).
+        * Cierra el cobro en Efectivo, Tarjeta o "A Cuenta" (Fiado) y le envía el recibo al cliente por WhatsApp.
         
         **4. 🛵 REPARTIDOR / LOGÍSTICA:**
-        * En **Entregas a Domicilio**, verán la lista de todos los pedidos que tienen dirección asignada y que ya pasaron por caja.
+        * En **Entregas a Domicilio**, verán todos los pedidos que tienen dirección asignada.
         * Una vez que lo entregan, presionan "Marcar como Entregado".
         
         **5. 💳 SALDOS Y DEUDAS:**
-        * Si un cajero marcó un pedido como "A Cuenta", automáticamente aparecerá en **Cuentas a Cobrar**. Desde ahí pueden enviarle un recordatorio de pago al cliente por WhatsApp y registrar pagos parciales hasta cancelar la deuda.
+        * Los pedidos "A Cuenta" aparecen aquí. El cajero puede enviar recordatorios de pago y registrar cuando el cliente viene a saldar su deuda.
         """)
