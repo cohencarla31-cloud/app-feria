@@ -29,40 +29,24 @@ st.markdown("""
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
     [data-testid="StyledFullScreenButton"] { display: none !important; visibility: hidden !important; }
     
-    /* CSS QUIRÚRGICO PARA ELIMINAR EL SCROLL LATERAL EN CELULARES */
+    /* CSS PARA OBLIGAR AL CELULAR A MOSTRAR 2 COLUMNAS SIN SCROLL LATERAL */
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
             flex-wrap: nowrap !important;
-            gap: 6px !important;
+            gap: 8px !important;
         }
         div[data-testid="column"] {
             min-width: 0 !important;
-            flex-shrink: 1 !important;
         }
-        /* Reducir márgenes internos del Number Input */
-        div[data-testid="stNumberInput"] {
-            min-width: 0 !important;
-            width: 100% !important;
-        }
-        div[data-baseweb="input"] {
-            width: 100% !important;
-        }
-        div[data-baseweb="input"] > div {
-            padding-left: 2px !important;
-            padding-right: 2px !important;
-        }
-        /* Achicar los botones + y - para que no empujen la pantalla */
+        /* Achicar los botones + y - para que no choquen */
         div[data-baseweb="input"] button {
-            padding: 4px 6px !important;
-            width: 32px !important;
-            min-width: 32px !important;
+            width: 2.2rem !important;
         }
-        /* Ajustar tamaño de letra para "Kg/Unid" y "Gramos" */
+        /* Letra de las etiquetas un poco más chica */
         label[data-testid="stWidgetLabel"] p {
             font-size: 13px !important;
-            white-space: nowrap !important;
-            text-overflow: ellipsis !important;
-            overflow: hidden !important;
+            color: #444 !important;
         }
     }
     </style>
@@ -352,18 +336,14 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                # Diseño de título superior
-                st.markdown(f"""
-                <div style='border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; margin-bottom: 8px;'>
-                    <span style='font-size: 16px; font-weight: 600; color: #1f1f1f;'>{prod_full}</span> 
-                    <span style='font-size: 14px; color: #2e7b32; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span>
-                </div>
-                """, unsafe_allow_html=True)
+                # RENGLÓN 1: Nombre y Precio
+                st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 
+                # RENGLÓN 2: Columnas de inputs pegaditas
                 c1, c2 = st.columns(2)
                 with c1:
                     st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
-                        "Kg/Unid", min_value=0, step=1, 
+                        "Kg / Unid", min_value=0, step=1, 
                         value=int(st.session_state.q_web[prod_full]['kg_un']), 
                         key=f"w_k_{prod_full}_{st.session_state.web_rk}"
                     )
@@ -374,7 +354,8 @@ if "feria" in query_params:
                             value=float(st.session_state.q_web[prod_full]['gr']), 
                             key=f"w_g_{prod_full}_{st.session_state.web_rk}"
                         )
-                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                # Separador visual fino
+                st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
             st.divider()
             colA, colB = st.columns(2)
@@ -573,7 +554,7 @@ if st.session_state.usuario_logueado is None:
         else: st.error("❌ Código inválido.")
     st.stop()
 
-# Obtener datos globales
+# Obtener datos globales y desempaquetar el STOCK_INICIAL
 ventas_data_global = obtener_ventas(st.session_state.link_feria)
 PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG, MEDIDAS_PLANAS, STOCK_INICIAL = cargar_datos_feria(st.session_state.link_feria)
 nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre", "La Feria"))
@@ -609,6 +590,7 @@ if st.session_state.rol_logueado == "Admin":
     tabs_nombres.append("📈 Reportes Pro (Stock y Ventas)")
     tabs_nombres.append("📥 Reportes Pro (Saldos Pendientes)")
 
+# Pestaña Guía de Uso
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     tabs_nombres.append("📖 Guía de Uso")
 
@@ -688,6 +670,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 filtro_txt_loc = st.text_input("🔍 Buscar fruta o verdura por nombre...", "", key=f"txt_loc_{st.session_state.v_rk}").lower()
                 st.markdown("---")
 
+                # RECORRIDO DE PRODUCTOS EN 2 RENGLONES COMPACTOS
                 for prod_full in productos_ord_loc:
                     if filtro_txt_loc and filtro_txt_loc not in prod_full.lower(): continue
                     
@@ -699,17 +682,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    st.markdown(f"""
-                    <div style='border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; margin-bottom: 8px;'>
-                        <span style='font-size: 16px; font-weight: 600; color: #1f1f1f;'>{prod_full}</span> 
-                        <span style='font-size: 14px; color: #2e7b32; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # RENGLÓN 1: Título completo y limpio
+                    st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     
+                    # RENGLÓN 2: Las casillas de Kg y Gramos 50/50
                     c1, c2 = st.columns(2)
                     with c1:
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                            "Kg/Unid", min_value=0, step=1, 
+                            "Kg / Unid", min_value=0, step=1, 
                             key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
                             value=int(st.session_state.q_loc[prod_full]['kg_un'])
                         )
@@ -720,7 +700,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 key=f"loc_g_{prod_full}_{st.session_state.v_rk}", 
                                 value=float(st.session_state.q_loc[prod_full]['gr'])
                             )
-                    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                    # Separador visual
+                    st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
                 tot_c = 0.0
                 tot_ahor = 0.0
@@ -797,20 +778,20 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                             for idx_item, it in enumerate(p_sel["items"]):
                                 medida_p = MEDIDAS_PLANAS.get(it["producto"], "kg")
                                 
-                                col_ori, col_pes = st.columns(2)
-                                with col_ori:
-                                    st.markdown(f"**Pidió:** {it['producto']}")
-                                    st.info(f"Cantidad aprox: {it['cantidad']}")
-                                with col_pes:
-                                    if medida_p == "un":
-                                        p_real = st.number_input(f"Peso/Cant Real (un):", value=float(it['cantidad']), step=1.0, key=f"w_un_{idx_w}_{idx_item}")
-                                    else:
-                                        k_in = int(it['cantidad'])
-                                        g_in = (it['cantidad'] - k_in) * 1000
-                                        c_k, c_g = st.columns(2)
-                                        with c_k: kr = st.number_input("Kilos", value=float(k_in), step=1.0, key=f"w_k_{idx_w}_{idx_item}")
-                                        with c_g: gr = st.number_input("Gramos", value=float(g_in), step=50.0, key=f"w_g_{idx_w}_{idx_item}")
-                                        p_real = kr + (gr / 1000.0)
+                                st.markdown(f"**Pidió:** {it['producto']}  *(Cant aprox: {it['cantidad']})*")
+                                
+                                c_k, c_g = st.columns(2)
+                                if medida_p == "un":
+                                    with c_k:
+                                        p_real = st.number_input(f"Real (un):", value=float(it['cantidad']), step=1.0, key=f"w_un_{idx_w}_{idx_item}")
+                                else:
+                                    k_in = int(it['cantidad'])
+                                    g_in = (it['cantidad'] - k_in) * 1000
+                                    with c_k: 
+                                        kr = st.number_input("Kilos", value=float(k_in), step=1.0, key=f"w_k_{idx_w}_{idx_item}")
+                                    with c_g: 
+                                        gr = st.number_input("Gramos", value=float(g_in), step=50.0, key=f"w_g_{idx_w}_{idx_item}")
+                                    p_real = kr + (gr / 1000.0)
                                 
                                 pr_u = PRECIOS.get(it["producto"], PRECIOS.get(NOMBRES.get(it["producto"], it["producto"]), 100))
                                 desc_u = DESCUENTOS.get(it["producto"], 0)
@@ -821,7 +802,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 tot_ahor_w += ahor_iw
                                 c_txt = f"{int(p_real)}un" if medida_p == "un" else f"{p_real}kg"
                                 nuevos_i.append({"producto": it["producto"], "cantidad": p_real, "cantidad_txt": c_txt, "subtotal": sub_r, "ahorro": ahor_iw, "tipo": "Propio"})
-                                st.markdown("---")
+                                st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                             
                             st.markdown(f"### Total Ajustado: **${tot_real:,.1f}**")
                             if tot_ahor_w > 0: st.success(f"Ahorro para el cliente: ${tot_ahor_w:,.1f}")
@@ -1335,11 +1316,9 @@ if st.session_state.rol_logueado == "Admin":
             df_alertas = df_stock_ctrl[(df_stock_ctrl["Stock Inicial"] > 0) & (df_stock_ctrl["Stock Final"] <= 5)]
             
             if not df_alertas.empty:
+                # SE ELIMINÓ EL STYLER.APPLYMAP para evitar errores de compatibilidad con Pandas
                 st.error("⚠️ **¡ATENCIÓN! PRODUCTOS CON STOCK BAJO (5 o menos):**")
-                try:
-                    st.dataframe(df_alertas[["Producto", "Stock Final"]].style.map(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True, hide_index=True)
-                except AttributeError:
-                    st.dataframe(df_alertas[["Producto", "Stock Final"]].style.applymap(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True, hide_index=True)
+                st.dataframe(df_alertas[["Producto", "Stock Final"]], use_container_width=True, hide_index=True)
                 
             st.write("📊 **Inventario Completo:**")
             st.dataframe(df_stock_ctrl, use_container_width=True, hide_index=True)
