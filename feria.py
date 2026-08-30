@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS (ESPACIO PARA NETLIFY + VERDE CLARO)
+# 1. CONFIGURACIÓN INICIAL Y BOTÓN FLOTANTE ESTILO APP
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -24,7 +24,7 @@ st.markdown("""
         overflow-x: hidden !important; 
     }
     
-    /* COLCHÓN INFERIOR AMPLIO: Evita que los botones choquen con el aviso de Netlify */
+    /* Colchón inferior generoso para que el contenido no quede tapado por el botón flotante ni por Netlify */
     [data-testid="stMainBlockContainer"] { 
         padding-bottom: 180px !important; 
         overflow-x: hidden !important;
@@ -336,8 +336,48 @@ if "feria" in query_params:
 
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
-            st.markdown("Puedes sumar usando las flechitas o tocando la casilla para **escribir el número**.")
             
+            # --- BOTÓN FLOTANTE SUPERIOR / DE ACCESO RÁPIDO AL CARRITO ---
+            st.markdown("""
+                <style>
+                .floating-cart {
+                    position: fixed;
+                    bottom: 65px;
+                    right: 15px;
+                    z-index: 999;
+                    background-color: #66BB6A;
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 30px;
+                    font-weight: bold;
+                    box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
+                    text-align: center;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+            
+            if st.button("🛒 VER CARRITO Y REVISAR ➡️", type="primary", use_container_width=True):
+                st.session_state.carrito_web = []
+                for p, dict_q in st.session_state.q_web.items():
+                    m = medidas.get(p, "kg")
+                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                    if c > 0:
+                        pr_orig = precios.get(p, 0)
+                        desc_p = descuentos.get(p, 0)
+                        pr_fin = pr_orig * (1 - desc_p/100)
+                        st.session_state.carrito_web.append({
+                            "producto": nombres_planos.get(p, p),
+                            "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
+                            "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
+                        })
+                        
+                if not st.session_state.carrito_web:
+                    st.warning("⚠️ Debes sumar cantidades a al menos un producto.")
+                else:
+                    st.session_state.web_step = 3
+                    st.rerun()
+            
+            st.markdown("---")
             filtro_txt = st.text_input("🔍 Buscar fruta o verdura por nombre...", "").lower()
             st.markdown("---")
             
@@ -372,7 +412,7 @@ if "feria" in query_params:
 
             st.divider()
             
-            if st.button("Revisar Carrito ➡️", type="primary", use_container_width=True):
+            if st.button("🛒 Revisar Carrito ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
                     m = medidas.get(p, "kg")
@@ -1182,7 +1222,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     with c_e1:
                         if st.button("🛵 Marcar como Entregado", type="primary", use_container_width=True):
                             gc = conectar_google()
-                            ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                            ws = gc.open_by_url(link_excel).worksheet("Registro de Ventas")
                             col_e = chr(65 + ent_sel['idx_est'])
                             
                             nuevo_est = "Entregado"
