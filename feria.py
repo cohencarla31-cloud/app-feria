@@ -8,25 +8,49 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y BLOQUEOS
+# 1. CONFIGURACIÓN INICIAL Y ESTILOS MÓVILES DEFINITIVOS
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
-hide_streamlit_style = """
-            <style>
-            header {visibility: hidden !important; display: none !important;}
-            [data-testid="stHeader"] {display: none !important;}
-            [data-testid="stToolbar"] {display: none !important;}
-            footer {visibility: hidden !important; display: none !important;}
-            .stAppDeployButton {display: none !important;}
-            html, body, [data-testid="stAppViewContainer"] {
-                overscroll-behavior-y: none !important;
+st.markdown("""
+    <style>
+    /* Estilos para que el menú superior se vea como botones táctiles de App */
+    div.row-widget.stRadio > div { flex-wrap: wrap; justify-content: center; gap: 8px; }
+    div.row-widget.stRadio > div > label { background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; font-size: 16px; border: 2px solid #ddd; cursor: pointer; margin: 2px; }
+    div.row-widget.stRadio > div > label:hover { border-color: #ff4b4b; background-color: #ffcccc; }
+    
+    /* BLOQUEO DE PULL-TO-REFRESH Y SCROLL MÓVIL */
+    html, body, [data-testid="stAppViewContainer"] {
+        overscroll-behavior-y: none !important;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* MARGEN INFERIOR AMPLIO: Evita que los botones finales queden tapados al fondo del celular */
+    [data-testid="stMainBlockContainer"] {
+        padding-bottom: 140px !important;
+    }
+    
+    /* Eliminar por completo la barra lateral nativa, el header, footer y botones flotantes */
+    [data-testid="stSidebar"], [data-testid="collapsedControl"], footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"], button[title="View fullscreen"], [data-testid="StyledFullScreenButton"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    </style>
+    
+    <script>
+    const borrarFullscreen = () => {
+        const elementos = document.querySelectorAll('a, button, div, span');
+        elementos.forEach(el => {
+            if (el.innerText && (el.innerText.includes('Fullscreen') || el.innerText.includes('Built with Streamlit'))) {
+                let contenedor = el.closest('div[style*="position"]') || el.parentElement;
+                if (contenedor) { contenedor.style.display = 'none'; }
+                el.style.display = 'none';
             }
-            button[title="View fullscreen"] {display: none !important; visibility: hidden !important;}
-            [data-testid="StyledFullScreenButton"] {display: none !important; visibility: hidden !important;}
-            </style>
-            """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+        });
+    };
+    setInterval(borrarFullscreen, 300);
+    </script>
+""", unsafe_allow_html=True)
 
 TZ_UY = timezone(timedelta(hours=-3))
 LINK_MASTER_SHEET = "https://docs.google.com/spreadsheets/d/1CEuvlAwExOf1FS_ZYeFYw205aoVePb8SCmmLjUJTg-w/edit?gid=0#gid=0"
@@ -266,7 +290,6 @@ if "feria" in query_params:
                 filtro_txt = st.text_input("🔍 Buscar producto...", "").lower()
                 st.markdown("---")
                 
-                # BOTÓN SUPERIOR DE ACCESO RÁPIDO AL CARRITO
                 if st.button("🛒 Ver Carrito y Revisar Pedido ➡️", type="primary", use_container_width=True):
                     st.session_state.carrito_web = []
                     for p, dict_q in st.session_state.q_web.items():
@@ -300,7 +323,6 @@ if "feria" in query_params:
                     desc_p = descuentos.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    # DISEÑO EN 2 COLUMNAS: Izquierda Nombre/Precio, Derecha Inputs en línea
                     col_info, col_inputs = st.columns([1.2, 1.8])
                     with col_info:
                         st.markdown(f"**{prod_full}**")
@@ -603,7 +625,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
             filtro_txt_loc = st.text_input("🔍 Buscar producto...", "", key=f"txt_loc_{st.session_state.v_rk}").lower()
             st.markdown("---")
 
-            # Cálculo en tiempo real previo para mostrar el botón arriba también si lo desean
+            # Cálculo en tiempo real previo
             tot_c = 0.0
             tot_ahor = 0.0
             for p, dict_q in q_loc.items():
@@ -616,7 +638,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     tot_c += c * pr_fin
                     tot_ahor += c * (pr_orig - pr_fin)
 
-            # BOTÓN VISIBLE ARRIBA (PARA NO HACER SCROLL INFINITO)
+            # BOTÓN VISIBLE ARRIBA
             if st.button("🚀 ENVIAR A CAJA (Acceso Rápido)", type="primary", use_container_width=True):
                 if not st.session_state.cli_nombre:
                     st.error("⚠️ Falta el nombre del cliente en el Paso 1.")
@@ -664,7 +686,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     st.rerun()
             st.markdown("---")
 
-            # WSP VISIBLE ARRIBA SI YA SE ENVIÓ A CAJA
             if 'msg_vendedor' in st.session_state and st.session_state.msg_vendedor:
                 st.success(st.session_state.msg_vendedor)
                 if 'link_vendedor' in st.session_state and st.session_state.link_vendedor:
@@ -685,7 +706,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 desc_p = DESCUENTOS.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                # DISEÑO EN 2 COLUMNAS (IZQ: Nombre/Precio, DER: Inputs)
                 col_info, col_inputs = st.columns([1.2, 1.8])
                 with col_info:
                     st.markdown(f"**{prod_full}**")
@@ -702,7 +722,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                             q_loc[prod_full]['gr'] = st.number_input("Gr:", min_value=0.0, step=50.0, key=f"loc_g_{prod_full}_{st.session_state.v_rk}", value=q_loc[prod_full]['gr'])
                 st.markdown("---")
 
-            # Recálculo final por si bajó
             tot_c = 0.0
             tot_ahor = 0.0
             for p, dict_q in q_loc.items():
