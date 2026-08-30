@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS (CON BOTÓN FLOTANTE DE ANCLAJE)
+# 1. CONFIGURACIÓN INICIAL Y CSS (ESPACIO PARA NETLIFY + VERDE CLARO)
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -16,7 +16,7 @@ st.markdown("""
     <style>
     div.row-widget.stRadio > div { flex-wrap: wrap; justify-content: center; gap: 8px; }
     div.row-widget.stRadio > div > label { background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; font-size: 16px; border: 2px solid #ddd; cursor: pointer; margin: 2px; }
-    div.row-widget.stRadio > div > label:hover { border-color: #ff4b4b; background-color: #ffcccc; }
+    div.row-widget.stRadio > div > label:hover { border-color: #66BB6A; background-color: #e8f5e9; }
     
     html, body, [data-testid="stAppViewContainer"], .stApp {
         overscroll-behavior-y: none !important;
@@ -24,8 +24,9 @@ st.markdown("""
         overflow-x: hidden !important; 
     }
     
+    /* COLCHÓN INFERIOR AMPLIO: Evita que los botones choquen con el aviso de Netlify */
     [data-testid="stMainBlockContainer"] { 
-        padding-bottom: 140px !important; 
+        padding-bottom: 180px !important; 
         overflow-x: hidden !important;
     }
     
@@ -33,33 +34,22 @@ st.markdown("""
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
     [data-testid="StyledFullScreenButton"] { display: none !important; visibility: hidden !important; }
     
-    /* BOTÓN FLOTANTE INTELIGENTE PARA IR AL FINAL AL INSTANTE */
-    .btn-flotante-fin {
-        position: fixed;
-        bottom: 80px;
-        right: 20px;
-        background-color: #2e7b32;
-        color: white;
-        padding: 10px 16px;
-        border-radius: 30px;
-        font-weight: bold;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
-        z-index: 99999;
-        text-decoration: none;
-        font-size: 14px;
-        display: flex;
-        align-items: center;
-        gap: 5px;
+    /* BOTONES PRINCIPALES EN VERDE CLARO Y FRESCO (#66BB6A) */
+    button[kind="primary"] {
+        background-color: #66BB6A !important;
+        border-color: #66BB6A !important;
+        color: white !important;
     }
-    .btn-flotante-fin:hover {
-        background-color: #235d26;
-        color: white;
+    button[kind="primary"]:hover {
+        background-color: #81C784 !important;
+        border-color: #81C784 !important;
     }
     
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"] {
             flex-direction: row !important;
             flex-wrap: nowrap !important;
+            width: 100% !important;
             gap: 5px !important;
         }
         div[data-testid="column"] {
@@ -348,16 +338,6 @@ if "feria" in query_params:
             st.subheader("2️⃣ Listado de Productos")
             st.markdown("Puedes sumar usando las flechitas o tocando la casilla para **escribir el número**.")
             
-            # ANCLA INVISIBLE ARRIBA
-            st.markdown("<div id='arriba-catalogo'></div>", unsafe_allow_html=True)
-            
-            # BOTÓN FLOTANTE PARA IR AL FINAL AL INSTANTE
-            st.markdown("""
-                <a href="#fin-catalogo" class="btn-flotante-fin">
-                    🛒 Ir al Carrito ⬇️
-                </a>
-            """, unsafe_allow_html=True)
-
             filtro_txt = st.text_input("🔍 Buscar fruta o verdura por nombre...", "").lower()
             st.markdown("---")
             
@@ -372,7 +352,7 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 
                 c1, c2 = st.columns(2)
                 with c1:
@@ -390,11 +370,8 @@ if "feria" in query_params:
                         )
                 st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
-            # ANCLA FINAL DEL CATÁLOGO
-            st.markdown("<div id='fin-catalogo'></div>", unsafe_allow_html=True)
             st.divider()
             
-            # BOTONES APILADOS Y BOTÓN PARA SUBIR
             if st.button("Revisar Carrito ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
@@ -421,12 +398,6 @@ if "feria" in query_params:
                 st.session_state.web_rk += 1
                 st.rerun()
 
-            st.markdown("""
-                <div style="text-align: center; margin-top: 15px;">
-                    <a href="#arriba-catalogo" style="color: #666; font-size: 14px; text-decoration: underline;">⬆️ Volver arriba al buscador</a>
-                </div>
-            """, unsafe_allow_html=True)
-
         elif st.session_state.web_step == 3:
             st.subheader("3️⃣ Revisión de tu Pedido")
             st.markdown(f"**Cliente:** {st.session_state.cli_web_nombre.upper()}")
@@ -436,14 +407,13 @@ if "feria" in query_params:
             tot_web = 0.0
             idx_to_del = []
             
-            # CRUZ A LA IZQUIERDA Y TEXTO A LA DERECHA
             for idx_cw, itw in enumerate(st.session_state.carrito_web):
                 c1, c2 = st.columns([1, 5])
                 with c1:
                     if st.button("❌", key=f"del_w3_{idx_cw}"):
                         idx_to_del.append(idx_cw)
                 with c2: 
-                    st.markdown(f"<div style='padding-top: 6px;'><b>{itw['producto']}</b> ({itw['cantidad_txt']}) &nbsp; <span style='color:#2e7b32'><b>${itw['subtotal']:,.1f}</b></span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding-top: 6px;'><b>{itw['producto']}</b> ({itw['cantidad_txt']}) &nbsp; <span style='color:#66BB6A'><b>${itw['subtotal']:,.1f}</b></span></div>", unsafe_allow_html=True)
                 
                 tot_web += itw['subtotal']
             
@@ -639,7 +609,7 @@ tabs = st.tabs(tabs_nombres)
 idx = 0
 
 # =======================================================
-# PESTAÑA 1: TOMAR PEDIDO ( CON BOTÓN FLOTANTE )
+# PESTAÑA 1: TOMAR PEDIDO 
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     with tabs[idx]:
@@ -705,16 +675,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
                 st.markdown("Puedes sumar con las flechas o tocar la casilla para escribir el número.")
                 
-                # ANCLA INVISIBLE ARRIBA
-                st.markdown("<div id='arriba-catalogo-local'></div>", unsafe_allow_html=True)
-                
-                # BOTÓN FLOTANTE PARA IR AL FINAL AL INSTANTE EN VENTA LOCAL
-                st.markdown("""
-                    <a href="#fin-catalogo-local" class="btn-flotante-fin">
-                        🛒 Ir al Total ⬇️
-                    </a>
-                """, unsafe_allow_html=True)
-
                 if 'q_loc' not in st.session_state:
                     st.session_state.q_loc = {p: {'kg_un': 0, 'gr': 0.0} for p in productos_ord_loc}
                 
@@ -732,12 +692,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    st.markdown(f"<div style='margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     
                     c1, c2 = st.columns(2)
                     with c1:
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                            "Kg / Unid", min_value=0, step=1, 
+                            "Kg/Unid", min_value=0, step=1, 
                             key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
                             value=int(st.session_state.q_loc[prod_full]['kg_un'])
                         )
@@ -749,9 +709,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 value=float(st.session_state.q_loc[prod_full]['gr'])
                             )
                     st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
-
-                # ANCLA FINAL EN VENTA LOCAL
-                st.markdown("<div id='fin-catalogo-local'></div>", unsafe_allow_html=True)
 
                 tot_c = 0.0
                 tot_ahor = 0.0
@@ -804,12 +761,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                         
                         st.session_state.v_rk += 1
                         st.rerun()
-
-                st.markdown("""
-                    <div style="text-align: center; margin-top: 15px;">
-                        <a href="#arriba-catalogo-local" style="color: #666; font-size: 14px; text-decoration: underline;">⬆️ Volver arriba al buscador</a>
-                    </div>
-                """, unsafe_allow_html=True)
 
             elif st.session_state.modo_tomar == "🌐 Ajustar Pedido Web":
                 st.write("### 📦 Armar Pedido Web (Comparativa: Pedido Original vs Peso Real)")
