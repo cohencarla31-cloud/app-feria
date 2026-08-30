@@ -29,14 +29,19 @@ st.markdown("""
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
     [data-testid="StyledFullScreenButton"] { display: none !important; visibility: hidden !important; }
     
+    /* TRUCO PARA EVITAR EL SCROLL LATERAL EN CELULARES */
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
-            gap: 5px !important;
-            align-items: center !important;
+            gap: 2px !important; /* Casi nada de espacio entre columnas */
         }
         div[data-testid="column"] {
             min-width: 0 !important;
+            padding: 0 2px !important; /* Le quitamos los márgenes a los costados */
+        }
+        /* Achicamos la fuente de los casilleros de números para que entren mejor */
+        div[data-baseweb="input"] {
+            font-size: 13px !important;
         }
     }
     </style>
@@ -315,7 +320,8 @@ if "feria" in query_params:
             filtro_txt = st.text_input("🔍 Buscar fruta o verdura por nombre...", "").lower()
             st.markdown("---")
             
-            c_h1, c_h2, c_h3 = st.columns([2.5, 1.2, 1.2])
+            # Nuevas proporciones para evitar el scroll lateral [Texto, Kg, Gr]
+            c_h1, c_h2, c_h3 = st.columns([1.8, 1.2, 1.2], gap="small")
             with c_h1: st.write("**Producto**")
             with c_h2: st.write("**Kg/Un**")
             with c_h3: st.write("**Gramos**")
@@ -332,10 +338,10 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                c1, c2, c3 = st.columns([2.5, 1.2, 1.2])
+                c1, c2, c3 = st.columns([1.8, 1.2, 1.2], gap="small")
                 
                 with c1:
-                    st.markdown(f"<div style='padding-top:4px; line-height:1.2;'><b>{prod_full}</b><br><small style='color:#666;'>${p_final:,.1f}/{medida_p}</small></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding-top:4px; line-height:1.2; font-size:14px;'><b>{prod_full}</b><br><small style='color:#666;'>${p_final:,.1f}/{medida_p}</small></div>", unsafe_allow_html=True)
                     
                 with c2:
                     st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
@@ -666,7 +672,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 filtro_txt_loc = st.text_input("🔍 Buscar fruta o verdura por nombre...", "", key=f"txt_loc_{st.session_state.v_rk}").lower()
                 st.markdown("---")
 
-                c_h1, c_h2, c_h3 = st.columns([2.5, 1.2, 1.2])
+                # Nuevas proporciones ajustadas para evitar scroll
+                c_h1, c_h2, c_h3 = st.columns([1.8, 1.2, 1.2], gap="small")
                 with c_h1: st.write("**Producto**")
                 with c_h2: st.write("**Kg/Un**")
                 with c_h3: st.write("**Gramos**")
@@ -683,9 +690,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    c1, c2, c3 = st.columns([2.5, 1.2, 1.2])
+                    c1, c2, c3 = st.columns([1.8, 1.2, 1.2], gap="small")
                     with c1:
-                        st.markdown(f"<div style='padding-top:4px; line-height:1.2;'><b>{prod_full}</b><br><small style='color:#666;'>${p_final:,.1f}/{medida_p}</small></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='padding-top:4px; line-height:1.2; font-size:14px;'><b>{prod_full}</b><br><small style='color:#666;'>${p_final:,.1f}/{medida_p}</small></div>", unsafe_allow_html=True)
                         
                     with c2:
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
@@ -1272,7 +1279,7 @@ if st.session_state.rol_logueado == "Admin":
                     vend = str(p['vendedor']).strip().title() if p['vendedor'] else "Desconocido"
                     vendedores_resumen[vend] = vendedores_resumen.get(vend, 0.0) + p['total']
                     
-                # Cálculos de stock con extractor inteligente
+                # Cálculos de stock con extractor inteligente para formatos viejos y nuevos
                 if "cancelado" not in est:
                     items_to_process = p['items']
                     try:
@@ -1321,7 +1328,10 @@ if st.session_state.rol_logueado == "Admin":
             
             if not df_alertas.empty:
                 st.error("⚠️ **¡ATENCIÓN! PRODUCTOS CON STOCK BAJO (5 o menos):**")
-                st.dataframe(df_alertas[["Producto", "Stock Final"]].style.applymap(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True)
+                try:
+                    st.dataframe(df_alertas[["Producto", "Stock Final"]].style.map(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True)
+                except AttributeError:
+                    st.dataframe(df_alertas[["Producto", "Stock Final"]].style.applymap(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True)
                 
             st.write("📊 **Inventario Completo:**")
             st.dataframe(df_stock_ctrl, use_container_width=True, hide_index=True)
@@ -1396,7 +1406,7 @@ if st.session_state.rol_logueado == "Admin":
                     if d["EsWeb"]: tabla_w.append(row)
                     else: tabla_l.append(row)
             
-            # Las ordenamos alfabéticamente por cliente para que sea impecable buscar
+            # Las ordenamos alfabéticamente por cliente
             df_w = pd.DataFrame(tabla_w).sort_values("Cliente") if tabla_w else pd.DataFrame(columns=["Cliente", "Detalle Deuda", "Total Pedido", "Pagado", "Saldo Pendiente"])
             df_l = pd.DataFrame(tabla_l).sort_values("Cliente") if tabla_l else pd.DataFrame(columns=["Cliente", "Detalle Deuda", "Total Pedido", "Pagado", "Saldo Pendiente"])
             
