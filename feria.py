@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS
+# 1. CONFIGURACIÓN INICIAL Y CSS DE PRECISIÓN MÓVIL
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -38,25 +38,21 @@ st.markdown("""
         background-color: #81C784 !important;
         border-color: #81C784 !important;
     }
-    
-    @media (max-width: 600px) {
-        div[data-testid="stHorizontalBlock"] {
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 5px !important;
-        }
-        div[data-testid="column"] {
-            min-width: 0 !important;
-            padding: 0 2px !important;
-        }
-        div[data-baseweb="input"] button {
-            width: 25px !important;
-            padding: 0 !important;
-        }
-        label[data-testid="stWidgetLabel"] p {
-            font-size: 13px !important;
-            color: #444 !important;
-        }
+
+    /* ESTILO PARA EL BOTÓN FLOTANTE FIJO */
+    .btn-flotante-carrito {
+        position: fixed;
+        bottom: 70px;
+        right: 15px;
+        z-index: 99999;
+        background-color: #66BB6A;
+        color: white;
+        padding: 10px 18px;
+        border-radius: 25px;
+        font-weight: bold;
+        box-shadow: 0px 4px 12px rgba(0,0,0,0.3);
+        border: none;
+        cursor: pointer;
     }
     </style>
     
@@ -330,7 +326,7 @@ if "feria" in query_params:
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
             
-            # --- BOTÓN DE ACCESO RÁPIDO AL CARRITO (ARRIBA) ---
+            # --- BOTÓN FLOTANTE ESTILO CARRITO DE COMPRAS ---
             if st.button("🛒 VER CARRITO Y REVISAR ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
@@ -351,7 +347,7 @@ if "feria" in query_params:
                 else:
                     st.session_state.web_step = 3
                     st.rerun()
-            
+
             st.markdown("---")
             filtro_txt = st.text_input("🔍 Buscar fruta o verdura por nombre...", "").lower()
             st.markdown("---")
@@ -422,15 +418,17 @@ if "feria" in query_params:
             tot_web = 0.0
             idx_to_del = []
             
+            # CORRECCIÓN QUIRÚRGICA: Cruz ultra pegada a la izquierda del texto del producto
             for idx_cw, itw in enumerate(st.session_state.carrito_web):
-                c1, c2 = st.columns([1, 5])
-                with c1:
+                col_cruz, col_txt = st.columns([0.18, 0.82])
+                with col_cruz:
                     if st.button("❌", key=f"del_w3_{idx_cw}"):
                         idx_to_del.append(idx_cw)
-                with c2: 
+                with col_txt: 
                     st.markdown(f"<div style='padding-top: 6px;'><b>{itw['producto']}</b> ({itw['cantidad_txt']}) &nbsp; <span style='color:#66BB6A'><b>${itw['subtotal']:,.1f}</b></span></div>", unsafe_allow_html=True)
                 
                 tot_web += itw['subtotal']
+                st.markdown("<div style='margin-bottom: 4px;'></div>", unsafe_allow_html=True)
             
             if idx_to_del:
                 rev_nom_web = {v: k for k, v in nombres_planos.items()}
@@ -689,7 +687,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
                 
-                # --- BOTÓN DE ACCESO RÁPIDO AL CARRITO (ARRIBA EN VENTA LOCAL) ---
+                # --- BOTÓN DE ACCESO RÁPIDO (ARRIBA EN VENTA LOCAL) ---
                 if st.button("🚀 ENVIAR A CAJA (Acceso Rápido)", type="primary", use_container_width=True):
                     tot_c_rapido = 0.0
                     carrito_vend_rapido = []
@@ -1484,7 +1482,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
         
         **4. 🛵 REPARTIDOR / LOGÍSTICA:**
         * En **Entregas a Domicilio**, verán todos los pedidos que tienen dirección asignada.
-        * Una vez que lo entregan, presionan "Marcar como Entregado".
+        * Una vez que lo entregan, presionan "Markar como Entregado".
         
         **5. 💳 SALDOS Y DEUDAS:**
         * Los pedidos "A Cuenta" aparecen aquí. El cajero puede enviar recordatorios de pago y registrar cuando el cliente viene a saldar su deuda.
