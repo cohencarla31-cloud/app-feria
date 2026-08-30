@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS REPARADO
+# 1. CONFIGURACIÓN INICIAL Y CSS
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -29,19 +29,16 @@ st.markdown("""
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
     [data-testid="StyledFullScreenButton"] { display: none !important; visibility: hidden !important; }
     
-    /* CSS REPARADO: Mantiene las columnas juntas pero respeta sus tamaños */
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"] {
             flex-direction: row !important;
             flex-wrap: nowrap !important;
             gap: 5px !important;
         }
-        /* Permite que las columnas se achiquen sin desbordar la pantalla */
         div[data-testid="column"] {
             min-width: 0 !important;
             padding: 0 2px !important;
         }
-        /* Achica los botones de + y - para que entren perfectos */
         div[data-baseweb="input"] button {
             width: 25px !important;
             padding: 0 !important;
@@ -338,10 +335,10 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                # RENGLÓN 1: Nombre y Precio (ocupa todo el ancho)
-                st.markdown(f"<div style='margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                # RENGLÓN 1: Nombre y Precio
+                st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 
-                # RENGLÓN 2: Kg y Gramos 50/50
+                # RENGLÓN 2: Columnas de inputs
                 c1, c2 = st.columns(2)
                 with c1:
                     st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
@@ -359,33 +356,33 @@ if "feria" in query_params:
                 st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
             st.divider()
-            colA, colB = st.columns(2)
-            with colA:
-                if st.button("⬅️ Atrás", use_container_width=True):
-                    st.session_state.web_step = 1
-                    st.session_state.web_rk += 1
+            
+            # BOTONES APILADOS UNO DEBAJO DEL OTRO
+            if st.button("⬅️ Atrás", use_container_width=True):
+                st.session_state.web_step = 1
+                st.session_state.web_rk += 1
+                st.rerun()
+                
+            if st.button("Revisar Carrito ➡️", type="primary", use_container_width=True):
+                st.session_state.carrito_web = []
+                for p, dict_q in st.session_state.q_web.items():
+                    m = medidas.get(p, "kg")
+                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                    if c > 0:
+                        pr_orig = precios.get(p, 0)
+                        desc_p = descuentos.get(p, 0)
+                        pr_fin = pr_orig * (1 - desc_p/100)
+                        st.session_state.carrito_web.append({
+                            "producto": nombres_planos.get(p, p),
+                            "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
+                            "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
+                        })
+                        
+                if not st.session_state.carrito_web:
+                    st.warning("⚠️ Debes sumar cantidades a al menos un producto para continuar.")
+                else:
+                    st.session_state.web_step = 3
                     st.rerun()
-            with colB:
-                if st.button("Revisar Carrito ➡️", type="primary", use_container_width=True):
-                    st.session_state.carrito_web = []
-                    for p, dict_q in st.session_state.q_web.items():
-                        m = medidas.get(p, "kg")
-                        c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
-                        if c > 0:
-                            pr_orig = precios.get(p, 0)
-                            desc_p = descuentos.get(p, 0)
-                            pr_fin = pr_orig * (1 - desc_p/100)
-                            st.session_state.carrito_web.append({
-                                "producto": nombres_planos.get(p, p),
-                                "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
-                                "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
-                            })
-                            
-                    if not st.session_state.carrito_web:
-                        st.warning("⚠️ Debes sumar cantidades a al menos un producto para continuar.")
-                    else:
-                        st.session_state.web_step = 3
-                        st.rerun()
 
         elif st.session_state.web_step == 3:
             st.subheader("3️⃣ Revisión de tu Pedido")
@@ -396,16 +393,18 @@ if "feria" in query_params:
             tot_web = 0.0
             idx_to_del = []
             
-            # DISEÑO DEL CARRITO: Texto 85% y Botón Borrar 15% en el mismo renglón
+            # DISEÑO: CRUZ A LA IZQUIERDA Y TEXTO A LA DERECHA
             for idx_cw, itw in enumerate(st.session_state.carrito_web):
-                c1, c2 = st.columns([5, 1])
-                with c1: 
-                    st.markdown(f"**{itw['producto']}** ({itw['cantidad_txt']}) &nbsp; <span style='color:#2e7b32'>**${itw['subtotal']:,.1f}**</span>", unsafe_allow_html=True)
-                with c2:
+                c1, c2 = st.columns([1, 5])
+                with c1:
+                    # Cruz roja y centrada a la izquierda
                     if st.button("❌", key=f"del_w3_{idx_cw}"):
                         idx_to_del.append(idx_cw)
+                with c2: 
+                    # El texto del producto a la derecha
+                    st.markdown(f"<div style='padding-top: 6px;'><b>{itw['producto']}</b> ({itw['cantidad_txt']}) &nbsp; <span style='color:#2e7b32'><b>${itw['subtotal']:,.1f}</b></span></div>", unsafe_allow_html=True)
+                
                 tot_web += itw['subtotal']
-                st.markdown("<div style='margin-bottom:6px;'></div>", unsafe_allow_html=True)
             
             if idx_to_del:
                 rev_nom_web = {v: k for k, v in nombres_planos.items()}
@@ -421,55 +420,54 @@ if "feria" in query_params:
             st.warning("⚖️ El importe es estimado según el peso exacto en la balanza.")
             st.divider()
             
-            colA, colB = st.columns(2)
-            with colA:
-                if st.button("⬅️ Volver a Productos", use_container_width=True):
-                    st.session_state.web_step = 2
-                    st.session_state.web_rk += 1
-                    st.rerun()
-            with colB:
-                if st.button("Confirmar y Enviar ➡️", type="primary", use_container_width=True):
+            # BOTONES APILADOS UNO DEBAJO DEL OTRO
+            if st.button("⬅️ Volver a Productos", use_container_width=True):
+                st.session_state.web_step = 2
+                st.session_state.web_rk += 1
+                st.rerun()
+                
+            if st.button("Confirmar y Enviar ➡️", type="primary", use_container_width=True):
+                try:
+                    if not st.session_state.carrito_web:
+                        st.warning("Tu carrito está vacío.")
+                        st.stop()
+                        
+                    filas_web = []
+                    ahora = datetime.now(TZ_UY)
+                    celular_formateado = limpiar_y_formatear_celular(st.session_state.cli_web_celular)
+                    nombre_mayus = st.session_state.cli_web_nombre.upper()
+                    
+                    items_estructurados = []
+                    for itw in st.session_state.carrito_web:
+                        filas_web.append([
+                            ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), "Web Online", 
+                            nombre_mayus, itw['producto'], itw['cantidad'], itw['subtotal'], 
+                            celular_formateado, "Pendiente Pago", "Web - Pendiente", 
+                            st.session_state.cli_web_dir, itw['ahorro'], "{}"
+                        ])
+                        items_estructurados.append({"producto": itw['producto'], "cantidad": itw['cantidad'], "cantidad_txt": itw['cantidad_txt'], "subtotal": itw['subtotal'], "ahorro": itw['ahorro'], "tipo": "Propio"})
+                    
+                    json_items = json.dumps(items_estructurados)
+                    for f_w in filas_web: f_w[12] = json_items 
+                    if st.session_state.cli_web_obs: filas_web[0][4] += f" | 📝 Obs: {st.session_state.cli_web_obs}" 
+                        
+                    gc = conectar_google()
+                    sh = gc.open_by_url(link_excel)
+                    sh.worksheet("Registro de Ventas").append_rows(filas_web) 
+                    
                     try:
-                        if not st.session_state.carrito_web:
-                            st.warning("Tu carrito está vacío.")
-                            st.stop()
-                            
-                        filas_web = []
-                        ahora = datetime.now(TZ_UY)
-                        celular_formateado = limpiar_y_formatear_celular(st.session_state.cli_web_celular)
-                        nombre_mayus = st.session_state.cli_web_nombre.upper()
-                        
-                        items_estructurados = []
-                        for itw in st.session_state.carrito_web:
-                            filas_web.append([
-                                ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), "Web Online", 
-                                nombre_mayus, itw['producto'], itw['cantidad'], itw['subtotal'], 
-                                celular_formateado, "Pendiente Pago", "Web - Pendiente", 
-                                st.session_state.cli_web_dir, itw['ahorro'], "{}"
-                            ])
-                            items_estructurados.append({"producto": itw['producto'], "cantidad": itw['cantidad'], "cantidad_txt": itw['cantidad_txt'], "subtotal": itw['subtotal'], "ahorro": itw['ahorro'], "tipo": "Propio"})
-                        
-                        json_items = json.dumps(items_estructurados)
-                        for f_w in filas_web: f_w[12] = json_items 
-                        if st.session_state.cli_web_obs: filas_web[0][4] += f" | 📝 Obs: {st.session_state.cli_web_obs}" 
-                            
-                        gc = conectar_google()
-                        sh = gc.open_by_url(link_excel)
-                        sh.worksheet("Registro de Ventas").append_rows(filas_web) 
-                        
-                        try:
-                            ws_cli = sh.worksheet("Clientes")
-                            nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
-                            if nombre_mayus not in nombres_existentes:
-                                ws_cli.append_row([nombre_mayus, celular_formateado, "Web"])
-                        except: pass
-                        
-                        limpiar_cache_ventas() 
-                        time.sleep(1)
-                        st.session_state.web_step = 4
-                        st.rerun()
-                    except Exception as ex_step3:
-                        st.error(f"Error al procesar el pedido: {ex_step3}")
+                        ws_cli = sh.worksheet("Clientes")
+                        nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
+                        if nombre_mayus not in nombres_existentes:
+                            ws_cli.append_row([nombre_mayus, celular_formateado, "Web"])
+                    except: pass
+                    
+                    limpiar_cache_ventas() 
+                    time.sleep(1)
+                    st.session_state.web_step = 4
+                    st.rerun()
+                except Exception as ex_step3:
+                    st.error(f"Error al procesar el pedido: {ex_step3}")
 
         elif st.session_state.web_step == 4:
             st.subheader("4️⃣ Paso Final: Enviar WhatsApp")
@@ -601,7 +599,7 @@ tabs = st.tabs(tabs_nombres)
 idx = 0
 
 # =======================================================
-# PESTAÑA 1: TOMAR PEDIDO (COMPACTO LADO A LADO)
+# PESTAÑA 1: TOMAR PEDIDO 
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     with tabs[idx]:
@@ -673,7 +671,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 filtro_txt_loc = st.text_input("🔍 Buscar fruta o verdura por nombre...", "", key=f"txt_loc_{st.session_state.v_rk}").lower()
                 st.markdown("---")
 
-                # RECORRIDO DE PRODUCTOS EN 2 RENGLONES COMPACTOS
                 for prod_full in productos_ord_loc:
                     if filtro_txt_loc and filtro_txt_loc not in prod_full.lower(): continue
                     
@@ -685,14 +682,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    # RENGLÓN 1: Nombre y precio (ocupa todo el ancho)
                     st.markdown(f"<div style='margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     
-                    # RENGLÓN 2: Las casillas de Kg y Gramos 50/50
                     c1, c2 = st.columns(2)
                     with c1:
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                            "Kg / Unid", min_value=0, step=1, 
+                            "Kg/Unid", min_value=0, step=1, 
                             key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
                             value=int(st.session_state.q_loc[prod_full]['kg_un'])
                         )
@@ -703,7 +698,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 key=f"loc_g_{prod_full}_{st.session_state.v_rk}", 
                                 value=float(st.session_state.q_loc[prod_full]['gr'])
                             )
-                    # Separador visual fino
                     st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
                 tot_c = 0.0
@@ -810,6 +804,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                             st.markdown(f"### Total Ajustado: **${tot_real:,.1f}**")
                             if tot_ahor_w > 0: st.success(f"Ahorro para el cliente: ${tot_ahor_w:,.1f}")
                                 
+                            # BOTONES APILADOS
                             if st.button("⚖️ Confirmar Pesos y Enviar a Caja Web", type="primary", use_container_width=True):
                                 gc = conectar_google()
                                 ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
@@ -1263,10 +1258,13 @@ if st.session_state.rol_logueado == "Admin":
             for p in ordenes_admin:
                 est = p['estado'].lower()
                 if "cancelado" not in est and "caja" not in est and "pendiente" not in est and "abono" not in est:
+                    
                     pago_bruto = str(p['pago']).strip().title() if p['pago'] else "No especificado"
                     origen = " (Web)" if "web" in est else " (Local)"
                     concepto = pago_bruto + origen
+                    
                     pagos_resumen[concepto] = pagos_resumen.get(concepto, 0.0) + p['total']
+                    
                     vend = str(p['vendedor']).strip().title() if p['vendedor'] else "Desconocido"
                     vendedores_resumen[vend] = vendedores_resumen.get(vend, 0.0) + p['total']
                     
@@ -1316,7 +1314,6 @@ if st.session_state.rol_logueado == "Admin":
             
             if not df_alertas.empty:
                 st.error("⚠️ **¡ATENCIÓN! PRODUCTOS CON STOCK BAJO (5 o menos):**")
-                # SE ELIMINÓ TODO TIPO DE STYLER. 100% NATIVO PARA EVITAR ERRORES
                 st.dataframe(df_alertas[["Producto", "Stock Final"]], use_container_width=True, hide_index=True)
                 
             st.write("📊 **Inventario Completo:**")
@@ -1424,4 +1421,3 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
         **5. 💳 SALDOS Y DEUDAS:**
         * Los pedidos "A Cuenta" aparecen aquí. El cajero puede enviar recordatorios de pago y registrar cuando el cliente viene a saldar su deuda.
         """)
-        
