@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS "ANTI-SCROLL LATERAL"
+# 1. CONFIGURACIÓN INICIAL Y CSS REPARADO
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -18,54 +18,37 @@ st.markdown("""
     div.row-widget.stRadio > div > label { background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; font-size: 16px; border: 2px solid #ddd; cursor: pointer; margin: 2px; }
     div.row-widget.stRadio > div > label:hover { border-color: #ff4b4b; background-color: #ffcccc; }
     
-    /* BLOQUEO ABSOLUTO DE SCROLL LATERAL Y PULL-TO-REFRESH */
-    html, body, [data-testid="stAppViewContainer"], .stApp {
+    html, body, [data-testid="stAppViewContainer"] {
         overscroll-behavior-y: none !important;
         -webkit-overflow-scrolling: touch;
-        overflow-x: hidden !important; 
     }
     
-    [data-testid="stMainBlockContainer"] { 
-        padding-bottom: 140px !important; 
-        overflow-x: hidden !important;
-    }
+    [data-testid="stMainBlockContainer"] { padding-bottom: 140px !important; }
     
     [data-testid="stSidebar"], [data-testid="collapsedControl"], footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
     [data-testid="StyledFullScreenButton"] { display: none !important; visibility: hidden !important; }
     
-    /* TRUCO PARA CELULARES: CAJONES GRISES ANGOSTOS Y JUNTOS */
+    /* CSS REPARADO: Mantiene las columnas juntas pero respeta sus tamaños */
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"] {
             flex-direction: row !important;
             flex-wrap: nowrap !important;
-            width: 100% !important;
-            gap: 4px !important;
+            gap: 5px !important;
         }
+        /* Permite que las columnas se achiquen sin desbordar la pantalla */
         div[data-testid="column"] {
             min-width: 0 !important;
-            padding: 0 !important;
+            padding: 0 2px !important;
         }
-        
-        /* Achicamos el fondo gris para que no sea largo innecesariamente */
-        div[data-testid="stNumberInput"] {
-            max-width: 110px !important;
-            margin: 0 auto !important; /* Los centra y los acerca */
-        }
+        /* Achica los botones de + y - para que entren perfectos */
         div[data-baseweb="input"] button {
             width: 25px !important;
             padding: 0 !important;
         }
         label[data-testid="stWidgetLabel"] p {
-            font-size: 12px !important;
-            text-align: center !important;
-            color: #555 !important;
-        }
-        /* Ajustar botones de Atrás y Revisar Carrito */
-        div[data-testid="stButton"] button {
-            padding: 8px 2px !important;
-            font-size: 14px !important;
-            width: 100% !important;
+            font-size: 13px !important;
+            color: #444 !important;
         }
     }
     </style>
@@ -355,10 +338,10 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                # RENGLÓN 1: Nombre y Precio
-                st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                # RENGLÓN 1: Nombre y Precio (ocupa todo el ancho)
+                st.markdown(f"<div style='margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 
-                # RENGLÓN 2: Columnas de inputs pegaditas
+                # RENGLÓN 2: Kg y Gramos 50/50
                 c1, c2 = st.columns(2)
                 with c1:
                     st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
@@ -373,7 +356,6 @@ if "feria" in query_params:
                             value=float(st.session_state.q_web[prod_full]['gr']), 
                             key=f"w_g_{prod_full}_{st.session_state.web_rk}"
                         )
-                # Separador visual fino
                 st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
             st.divider()
@@ -414,16 +396,16 @@ if "feria" in query_params:
             tot_web = 0.0
             idx_to_del = []
             
-            # DISEÑO 2 COLUMNAS COMPACTO: Texto a la izquierda, la ❌ a la derecha pegada
+            # DISEÑO DEL CARRITO: Texto 85% y Botón Borrar 15% en el mismo renglón
             for idx_cw, itw in enumerate(st.session_state.carrito_web):
-                c1, c2 = st.columns([4, 1])
+                c1, c2 = st.columns([5, 1])
                 with c1: 
                     st.markdown(f"**{itw['producto']}** ({itw['cantidad_txt']}) &nbsp; <span style='color:#2e7b32'>**${itw['subtotal']:,.1f}**</span>", unsafe_allow_html=True)
                 with c2:
                     if st.button("❌", key=f"del_w3_{idx_cw}"):
                         idx_to_del.append(idx_cw)
-                st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
                 tot_web += itw['subtotal']
+                st.markdown("<div style='margin-bottom:6px;'></div>", unsafe_allow_html=True)
             
             if idx_to_del:
                 rev_nom_web = {v: k for k, v in nombres_planos.items()}
@@ -576,7 +558,7 @@ if st.session_state.usuario_logueado is None:
         else: st.error("❌ Código inválido.")
     st.stop()
 
-# Obtener datos globales y desempaquetar el STOCK_INICIAL
+# Obtener datos globales
 ventas_data_global = obtener_ventas(st.session_state.link_feria)
 PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG, MEDIDAS_PLANAS, STOCK_INICIAL = cargar_datos_feria(st.session_state.link_feria)
 nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre", "La Feria"))
@@ -612,7 +594,6 @@ if st.session_state.rol_logueado == "Admin":
     tabs_nombres.append("📈 Reportes Pro (Stock y Ventas)")
     tabs_nombres.append("📥 Reportes Pro (Saldos Pendientes)")
 
-# Pestaña Guía de Uso
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     tabs_nombres.append("📖 Guía de Uso")
 
@@ -620,7 +601,7 @@ tabs = st.tabs(tabs_nombres)
 idx = 0
 
 # =======================================================
-# PESTAÑA 1: TOMAR PEDIDO 
+# PESTAÑA 1: TOMAR PEDIDO (COMPACTO LADO A LADO)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     with tabs[idx]:
@@ -704,14 +685,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    # RENGLÓN 1: Título completo y limpio
-                    st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                    # RENGLÓN 1: Nombre y precio (ocupa todo el ancho)
+                    st.markdown(f"<div style='margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     
                     # RENGLÓN 2: Las casillas de Kg y Gramos 50/50
                     c1, c2 = st.columns(2)
                     with c1:
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                            "Kg/Unid", min_value=0, step=1, 
+                            "Kg / Unid", min_value=0, step=1, 
                             key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
                             value=int(st.session_state.q_loc[prod_full]['kg_un'])
                         )
@@ -722,7 +703,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 key=f"loc_g_{prod_full}_{st.session_state.v_rk}", 
                                 value=float(st.session_state.q_loc[prod_full]['gr'])
                             )
-                    # Separador visual
+                    # Separador visual fino
                     st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
                 tot_c = 0.0
@@ -1282,13 +1263,10 @@ if st.session_state.rol_logueado == "Admin":
             for p in ordenes_admin:
                 est = p['estado'].lower()
                 if "cancelado" not in est and "caja" not in est and "pendiente" not in est and "abono" not in est:
-                    
                     pago_bruto = str(p['pago']).strip().title() if p['pago'] else "No especificado"
                     origen = " (Web)" if "web" in est else " (Local)"
                     concepto = pago_bruto + origen
-                    
                     pagos_resumen[concepto] = pagos_resumen.get(concepto, 0.0) + p['total']
-                    
                     vend = str(p['vendedor']).strip().title() if p['vendedor'] else "Desconocido"
                     vendedores_resumen[vend] = vendedores_resumen.get(vend, 0.0) + p['total']
                     
@@ -1302,7 +1280,6 @@ if st.session_state.rol_logueado == "Admin":
                     for item in items_to_process:
                         prod_raw = str(item.get('producto', ''))
                         prod_clean = prod_raw.replace("(Web Ajustado)", "").replace("(Propio)", "").replace("(Ajeno)", "").strip()
-                        
                         if " | " in prod_clean:
                             partes = prod_clean.split(" | ")
                             for parte in partes:
@@ -1339,16 +1316,13 @@ if st.session_state.rol_logueado == "Admin":
             
             if not df_alertas.empty:
                 st.error("⚠️ **¡ATENCIÓN! PRODUCTOS CON STOCK BAJO (5 o menos):**")
-                try:
-                    st.dataframe(df_alertas[["Producto", "Stock Final"]].style.map(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True, hide_index=True)
-                except AttributeError:
-                    st.dataframe(df_alertas[["Producto", "Stock Final"]].style.applymap(lambda x: "background-color: #ffcccc; color: red;", subset=["Stock Final"]), use_container_width=True, hide_index=True)
+                # SE ELIMINÓ TODO TIPO DE STYLER. 100% NATIVO PARA EVITAR ERRORES
+                st.dataframe(df_alertas[["Producto", "Stock Final"]], use_container_width=True, hide_index=True)
                 
             st.write("📊 **Inventario Completo:**")
             st.dataframe(df_stock_ctrl, use_container_width=True, hide_index=True)
             
             st.divider()
-            
             col_r1, col_r2 = st.columns(2)
             with col_r1:
                 st.subheader("💳 Por Forma de Pago y Origen")
@@ -1369,7 +1343,6 @@ if st.session_state.rol_logueado == "Admin":
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
         st.write("### 📥 Reporte de Saldos Pendientes (Descargable)")
-        
         col_ref1, _ = st.columns([1, 3])
         with col_ref1:
             if st.button("🔄 Refrescar Reporte"):
@@ -1385,15 +1358,11 @@ if st.session_state.rol_logueado == "Admin":
                 cli = str(o['cliente']).strip().title()
                 if cli not in resumen_saldos:
                     resumen_saldos[cli] = {"Total": 0.0, "Pagado": 0.0, "Tipos": set(), "EsWeb": False}
-                
                 amt = o['total']
                 is_web = "web" in o['estado'].lower() or "web" in o['vendedor'].lower()
                 is_abono = "abono" in o['estado'].lower() or "abono" in o['detalle'].lower()
-                
                 if is_web: resumen_saldos[cli]["EsWeb"] = True
-                
-                if is_abono:
-                    resumen_saldos[cli]["Pagado"] += abs(amt)
+                if is_abono: resumen_saldos[cli]["Pagado"] += abs(amt)
                 else:
                     resumen_saldos[cli]["Total"] += amt
                     if "fiado" in o['estado'].lower() or "cuenta" in o['estado'].lower() or "fiado" in o['pago'].lower():
@@ -1406,13 +1375,7 @@ if st.session_state.rol_logueado == "Admin":
             for cli, d in resumen_saldos.items():
                 saldo = d["Total"] - d["Pagado"]
                 if saldo > 0.01:
-                    row = {
-                        "Cliente": cli,
-                        "Detalle Deuda": " + ".join(list(d["Tipos"])),
-                        "Total Pedido": f"${d['Total']:,.1f}",
-                        "Pagado": f"${d['Pagado']:,.1f}",
-                        "Saldo Pendiente": f"${saldo:,.1f}"
-                    }
+                    row = {"Cliente": cli, "Detalle Deuda": " + ".join(list(d["Tipos"])), "Total Pedido": f"${d['Total']:,.1f}", "Pagado": f"${d['Pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"}
                     if d["EsWeb"]: tabla_w.append(row)
                     else: tabla_l.append(row)
             
@@ -1424,16 +1387,12 @@ if st.session_state.rol_logueado == "Admin":
                 st.subheader("🌐 Saldos Web")
                 st.dataframe(df_w, use_container_width=True, hide_index=True)
                 if not df_w.empty:
-                    csv_w = df_w.to_csv(index=False).encode('utf-8')
-                    st.download_button("📥 Descargar Saldos Web (CSV)", csv_w, "saldos_web.csv", "text/csv")
-                    
+                    st.download_button("📥 Descargar Saldos Web (CSV)", df_w.to_csv(index=False).encode('utf-8'), "saldos_web.csv", "text/csv")
             with c2:
                 st.subheader("🏪 Saldos Locales")
                 st.dataframe(df_l, use_container_width=True, hide_index=True)
                 if not df_l.empty:
-                    csv_l = df_l.to_csv(index=False).encode('utf-8')
-                    st.download_button("📥 Descargar Saldos Locales (CSV)", csv_l, "saldos_locales.csv", "text/csv")
-                    
+                    st.download_button("📥 Descargar Saldos Locales (CSV)", df_l.to_csv(index=False).encode('utf-8'), "saldos_locales.csv", "text/csv")
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
@@ -1444,7 +1403,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     with tabs[idx]:
         st.write("### 📖 Guía Rápida de la App")
         st.info("Esta aplicación sincroniza a todo el equipo en tiempo real. ¡Si todos cumplen su rol, el negocio vuela!")
-        
         st.markdown("""
         **1. 🛍️ VENDEDOR (Tomar Pedido):**
         * Busca al cliente, anota las cantidades y presiona **Enviar a Caja**.
@@ -1466,3 +1424,4 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
         **5. 💳 SALDOS Y DEUDAS:**
         * Los pedidos "A Cuenta" aparecen aquí. El cajero puede enviar recordatorios de pago y registrar cuando el cliente viene a saldar su deuda.
         """)
+        
