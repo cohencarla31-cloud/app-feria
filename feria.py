@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y BLOQUEOS AGRESIVOS
+# 1. CONFIGURACIÓN INICIAL Y BLOQUEOS AGRESIVOS (Y COLUMNAS LADO A LADO)
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -28,10 +28,22 @@ st.markdown("""
     /* MARGEN INFERIOR */
     [data-testid="stMainBlockContainer"] { padding-bottom: 140px !important; }
     
-    /* ELIMINAR BARRAS DE STREAMLIT, TOOLBARS DE TABLAS Y FULLSCREEN */
+    /* ELIMINAR BARRAS DE STREAMLIT Y FULLSCREEN */
     [data-testid="stSidebar"], [data-testid="collapsedControl"], footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
-    [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; }
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
+    [data-testid="StyledFullScreenButton"] { display: none !important; visibility: hidden !important; }
+    
+    /* TRUCO MAGICO: Obligar a las columnas a quedarse lado a lado en el celular */
+    @media (max-width: 600px) {
+        div[data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            gap: 5px !important;
+            align-items: center !important;
+        }
+        div[data-testid="column"] {
+            min-width: 0 !important;
+        }
+    }
     </style>
     
     <script>
@@ -243,7 +255,7 @@ if "feria" in query_params:
             celular_feriante = config.get("celular_feriante", config.get("celular_contacto", "59893343092"))
             bienvenida_dia = config.get("bienvenida", config.get("ofertas", config.get("banner", "")))
             
-            # Ordenar alfabéticamente por nombre plano (ignorando emojis)
+            # Ordenar alfabéticamente ignorando emojis
             productos_ord_web = sorted(productos, key=lambda x: nombres_planos.get(x, x).strip().lower())
             
             st.title(f"🛒 {nombre_feria}")
@@ -252,13 +264,15 @@ if "feria" in query_params:
             with st.expander("ℹ️ Pasos para tu Pedido Online", expanded=(st.session_state.web_step == 1)):
                 st.markdown("""
                 1️⃣ **Datos:** Completa tu nombre, celular y dirección.
-                2️⃣ **Productos:** Escribe en la tabla los Kg o Unidades que deseas de cada producto.
-                3️⃣ **Revisión:** Verifica el total de tu compra y elimina productos si te equivocaste.
+                2️⃣ **Productos:** Usa las flechitas o escribe la cantidad al lado de cada producto.
+                3️⃣ **Revisión:** Verifica el total de tu compra.
                 4️⃣ **Confirmar:** Envía el WhatsApp para asegurar el pedido.
                 """)
             
             st.markdown(f"<h3 style='text-align: center; color: #4CAF50;'>📋 Paso {st.session_state.web_step} de 4</h3>", unsafe_allow_html=True)
             st.divider()
+
+            if 'q_web' not in st.session_state: st.session_state.q_web = {}
 
             if st.session_state.web_step == 1:
                 st.subheader("1️⃣ Tus Datos de Entrega")
@@ -269,7 +283,7 @@ if "feria" in query_params:
                 if 'cli_web_obs' not in st.session_state: st.session_state.cli_web_obs = ""
                 
                 st.session_state.cli_web_nombre = st.text_input("Nombre y Apellido:", value=st.session_state.cli_web_nombre)
-                st.session_state.cli_web_celular = st.text_input("Celular (Cambia el 598 por tu código de país si estás en el exterior. Ej Arg: 549):", value=st.session_state.cli_web_celular)
+                st.session_state.cli_web_celular = st.text_input("Celular (Cambia el 598 por tu código de país si estás fuera. Ej Arg: 549):", value=st.session_state.cli_web_celular)
                 st.session_state.cli_web_dir = st.text_input("Dirección de Envío (Calle, Nro y Esquina):", value=st.session_state.cli_web_dir)
                 st.session_state.cli_web_obs = st.text_area("Observaciones (Opcional):", value=st.session_state.cli_web_obs)
                 
@@ -283,44 +297,50 @@ if "feria" in query_params:
 
             elif st.session_state.web_step == 2:
                 st.subheader("2️⃣ Listado de Productos")
-                st.markdown("Escribe las cantidades directamente en la tabla.")
+                st.markdown("Puedes sumar usando las flechitas o tocando la casilla para **escribir el número**.")
                 
-                if 'q_web' not in st.session_state:
-                    st.session_state.q_web = {p: {'kg_un': 0, 'gr': 0} for p in productos_ord_web}
+                filtro_txt = st.text_input("🔍 Buscar fruta o verdura por nombre...", "").lower()
+                st.markdown("---")
                 
-                filtro_txt_web = st.text_input("🔍 Buscar por nombre de fruta o verdura...", "").lower()
+                # Encabezados visuales de la tabla
+                c_h1, c_h2, c_h3 = st.columns([2.5, 1.2, 1.2])
+                with c_h1: st.write("**Producto**")
+                with c_h2: st.write("**Kg/Un**")
+                with c_h3: st.write("**Gramos**")
+                st.divider()
                 
-                # Armado rápido del DataFrame para el Editor
-                df_data_web = []
-                for p in productos_ord_web:
-                    if filtro_txt_web and filtro_txt_web not in p.lower(): continue
+                for prod_full in productos_ord_web:
+                    if filtro_txt and filtro_txt not in prod_full.lower(): continue
                     
-                    m = medidas.get(p, "kg")
-                    p_fin = precios.get(p, 0) * (1 - descuentos.get(p, 0)/100)
-                    q = st.session_state.q_web.get(p, {'kg_un': 0, 'gr': 0})
+                    if prod_full not in st.session_state.q_web:
+                        st.session_state.q_web[prod_full] = {'kg_un': 0, 'gr': 0.0}
                     
-                    df_data_web.append({
-                        "Producto": p,
-                        "Precio": f"${p_fin:,.0f} /{m}",
-                        "Kg_Un": int(q['kg_un']),
-                        "Gramos": int(q['gr']) if m != "un" else 0
-                    })
-                
-                df_edit_web = pd.DataFrame(df_data_web)
-                
-                # El componente más eficiente de Streamlit: La tabla editable
-                edited_df_web = st.data_editor(
-                    df_edit_web,
-                    column_config={
-                        "Producto": st.column_config.TextColumn("🛒 Producto", disabled=True),
-                        "Precio": st.column_config.TextColumn("💲 Precio", disabled=True),
-                        "Kg_Un": st.column_config.NumberColumn("⚖️ Kg / Unid", min_value=0, step=1),
-                        "Gramos": st.column_config.NumberColumn("🤏 Gramos", min_value=0, max_value=950, step=50)
-                    },
-                    hide_index=True,
-                    use_container_width=True,
-                    key="editor_web"
-                )
+                    medida_p = medidas.get(prod_full, "kg")
+                    precio_orig = precios.get(prod_full, 0)
+                    desc_p = descuentos.get(prod_full, 0)
+                    p_final = precio_orig * (1 - desc_p/100)
+                    
+                    c1, c2, c3 = st.columns([2.5, 1.2, 1.2])
+                    
+                    with c1:
+                        # Se usa HTML para compactar el texto del nombre y el precio
+                        st.markdown(f"<div style='padding-top:4px; line-height:1.2;'><b>{prod_full}</b><br><small style='color:#666;'>${p_final:,.1f}/{medida_p}</small></div>", unsafe_allow_html=True)
+                        
+                    with c2:
+                        st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
+                            "KgUn", min_value=0, step=1, 
+                            value=int(st.session_state.q_web[prod_full]['kg_un']), 
+                            key=f"w_k_{prod_full}", label_visibility="collapsed"
+                        )
+                        
+                    with c3:
+                        if medida_p != "un":
+                            st.session_state.q_web[prod_full]['gr'] = st.number_input(
+                                "Gr", min_value=0.0, step=50.0, 
+                                value=float(st.session_state.q_web[prod_full]['gr']), 
+                                key=f"w_g_{prod_full}", label_visibility="collapsed"
+                            )
+                    st.markdown("---")
 
                 st.divider()
                 colA, colB = st.columns(2)
@@ -331,29 +351,21 @@ if "feria" in query_params:
                 with colB:
                     if st.button("Revisar Carrito ➡️", type="primary", use_container_width=True):
                         st.session_state.carrito_web = []
-                        # Recolectar de la tabla editada
-                        if not edited_df_web.empty:
-                            for idx, row in edited_df_web.iterrows():
-                                p = row["Producto"]
-                                k = row["Kg_Un"]
-                                g = row["Gramos"]
-                                
-                                st.session_state.q_web[p] = {'kg_un': k, 'gr': g}
-                                
-                                m = medidas.get(p, "kg")
-                                c = k if m == "un" else k + (g / 1000.0)
-                                if c > 0:
-                                    pr_orig = precios.get(p, 0)
-                                    desc_p = descuentos.get(p, 0)
-                                    pr_fin = pr_orig * (1 - desc_p/100)
-                                    st.session_state.carrito_web.append({
-                                        "producto": nombres_planos.get(p, p),
-                                        "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
-                                        "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
-                                    })
+                        for p, dict_q in st.session_state.q_web.items():
+                            m = medidas.get(p, "kg")
+                            c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                            if c > 0:
+                                pr_orig = precios.get(p, 0)
+                                desc_p = descuentos.get(p, 0)
+                                pr_fin = pr_orig * (1 - desc_p/100)
+                                st.session_state.carrito_web.append({
+                                    "producto": nombres_planos.get(p, p),
+                                    "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
+                                    "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
+                                })
                                 
                         if not st.session_state.carrito_web:
-                            st.warning("⚠️ Debes sumar cantidades en la tabla a al menos un producto.")
+                            st.warning("⚠️ Debes sumar cantidades a al menos un producto.")
                         else:
                             st.session_state.web_step = 3
                             st.rerun()
@@ -381,7 +393,7 @@ if "feria" in query_params:
                         rem_item = st.session_state.carrito_web.pop(d)
                         pf = rev_nom_web.get(rem_item['producto'], rem_item['producto'])
                         if pf in st.session_state.q_web:
-                            st.session_state.q_web[pf] = {'kg_un': 0, 'gr': 0}
+                            st.session_state.q_web[pf] = {'kg_un': 0, 'gr': 0.0}
                     st.rerun()
                     
                 st.markdown("---")
@@ -525,7 +537,7 @@ PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG, MEDIDAS
 nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre", "La Feria"))
 celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_contacto", "59893343092"))
 
-# Ordenar alfabéticamente ignorando emojis para la vista local
+# Ordenar alfabéticamente ignorando emojis
 productos_ord_loc = sorted(PRODUCTOS, key=lambda x: NOMBRES.get(x, x).strip().lower())
 
 with st.sidebar:
@@ -560,7 +572,7 @@ tabs = st.tabs(tabs_nombres)
 idx = 0
 
 # =======================================================
-# PESTAÑA 1: TOMAR PEDIDO (TABLA COMPACTA Y BOTÓN VISIBLE)
+# PESTAÑA 1: TOMAR PEDIDO (COMPACTO LADO A LADO)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     with tabs[idx]:
@@ -581,6 +593,19 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
 
         # --- SECCIÓN 1: VENTA LOCAL ---
         if st.session_state.modo_tomar == "🛍️ Venta Local":
+            
+            # WSP VISIBLE ARRIBA SI YA SE ENVIÓ A CAJA
+            if 'msg_vendedor' in st.session_state and st.session_state.msg_vendedor:
+                st.success(st.session_state.msg_vendedor)
+                if 'link_vendedor' in st.session_state and st.session_state.link_vendedor:
+                    st.link_button("📲 ENVIAR WHATSAPP AL CAJERO (¡Toca aquí!)", st.session_state.link_vendedor, type="primary", use_container_width=True)
+                if st.button("✅ Crear Nuevo Pedido", type="secondary", use_container_width=True):
+                    st.session_state.msg_vendedor = ""
+                    st.session_state.link_vendedor = ""
+                    if 'q_loc' in st.session_state: del st.session_state.q_loc
+                    st.rerun()
+                st.markdown("---")
+            
             st.markdown("### 👤 Paso 1: Datos del Cliente")
             
             lista_clientes_base = sorted(list(CLIENTES_DICT.keys())) if CLIENTES_DICT else []
@@ -606,98 +631,88 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
             st.selectbox("Seleccionar Cliente Frecuente:", opciones_cli, index=index_def, key=f"sel_cli_loc_{st.session_state.v_rk}", on_change=callback_cliente)
             
             st.session_state.cli_nombre = st.text_input("Nombre y Apellido:", value=st.session_state.cli_nombre).strip().upper()
-            st.session_state.cli_celular = st.text_input("Celular (Cambia el 598 por tu código de país si estás en el exterior. Ej Arg: 549):", value=st.session_state.cli_celular)
+            st.session_state.cli_celular = st.text_input("Celular (Uy: 598... / Arg: 549...):", value=st.session_state.cli_celular)
 
             st.divider()
-            
-            # MOSTRAR EL BOTÓN DE WSP ARRIBA AL ENVIAR A CAJA PARA EVITAR SCROLL
-            if 'msg_vendedor' in st.session_state and st.session_state.msg_vendedor:
-                st.success(st.session_state.msg_vendedor)
-                if 'link_vendedor' in st.session_state and st.session_state.link_vendedor:
-                    st.link_button("📲 ENVIAR WHATSAPP AL CAJERO (¡Toca aquí!)", st.session_state.link_vendedor, type="primary", use_container_width=True)
-                if st.button("✅ Crear Nuevo Pedido", type="secondary", use_container_width=True):
-                    st.session_state.msg_vendedor = ""
-                    st.session_state.link_vendedor = ""
-                    if 'q_loc' in st.session_state: del st.session_state.q_loc
-                    st.rerun()
-                st.markdown("---")
 
             st.markdown("### 🛒 Paso 2: Catálogo de Productos")
-            st.markdown("Escribe las cantidades directamente en la tabla.")
+            st.markdown("Puedes sumar con las flechas o tocar el número y escribirlo directo.")
             
             if 'q_loc' not in st.session_state:
-                st.session_state.q_loc = {p: {'kg_un': 0, 'gr': 0} for p in productos_ord_loc}
+                st.session_state.q_loc = {p: {'kg_un': 0, 'gr': 0.0} for p in productos_ord_loc}
             
             filtro_txt_loc = st.text_input("🔍 Buscar fruta o verdura por nombre...", "", key=f"txt_loc_{st.session_state.v_rk}").lower()
-            
-            # Armado rápido del DataFrame
-            df_data_loc = []
-            for p in productos_ord_loc:
-                if filtro_txt_loc and filtro_txt_loc not in p.lower(): continue
-                
-                m = MEDIDAS.get(p, "kg")
-                p_fin = PRECIOS.get(p, 0) * (1 - DESCUENTOS.get(p, 0)/100)
-                q = st.session_state.q_loc.get(p, {'kg_un': 0, 'gr': 0})
-                
-                df_data_loc.append({
-                    "Producto": p,
-                    "Precio": f"${p_fin:,.0f} /{m}",
-                    "Kg_Un": int(q['kg_un']),
-                    "Gramos": int(q['gr']) if m != "un" else 0
-                })
-            
-            df_edit_loc = pd.DataFrame(df_data_loc)
-            
-            edited_df_loc = st.data_editor(
-                df_edit_loc,
-                column_config={
-                    "Producto": st.column_config.TextColumn("🛒 Producto", disabled=True),
-                    "Precio": st.column_config.TextColumn("💲 Precio", disabled=True),
-                    "Kg_Un": st.column_config.NumberColumn("⚖️ Kg / Unid", min_value=0, step=1),
-                    "Gramos": st.column_config.NumberColumn("🤏 Gramos", min_value=0, max_value=950, step=50)
-                },
-                hide_index=True,
-                use_container_width=True,
-                key=f"editor_loc_{st.session_state.v_rk}"
-            )
+            st.markdown("---")
 
+            # Encabezados de tabla
+            c_h1, c_h2, c_h3 = st.columns([2.5, 1.2, 1.2])
+            with c_h1: st.write("**Producto**")
+            with c_h2: st.write("**Kg/Un**")
+            with c_h3: st.write("**Gramos**")
             st.divider()
-            
-            # Cálculo de Totales post-edición
+
+            for prod_full in productos_ord_loc:
+                if filtro_txt_loc and filtro_txt_loc not in prod_full.lower(): continue
+                
+                if prod_full not in st.session_state.q_loc: 
+                    st.session_state.q_loc[prod_full] = {'kg_un': 0, 'gr': 0.0}
+                
+                medida_p = MEDIDAS.get(prod_full, "kg")
+                precio_orig = PRECIOS.get(prod_full, 0)
+                desc_p = DESCUENTOS.get(prod_full, 0)
+                p_final = precio_orig * (1 - desc_p/100)
+                
+                c1, c2, c3 = st.columns([2.5, 1.2, 1.2])
+                with c1:
+                    # Usamos html para hacer super chico el texto y que entre en 1 linea
+                    st.markdown(f"<div style='padding-top:4px; line-height:1.2;'><b>{prod_full}</b><br><small style='color:#666;'>${p_final:,.1f}/{medida_p}</small></div>", unsafe_allow_html=True)
+                    
+                with c2:
+                    st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
+                        "KgUn", min_value=0, step=1, 
+                        key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
+                        value=int(st.session_state.q_loc[prod_full]['kg_un']), 
+                        label_visibility="collapsed"
+                    )
+                with c3:
+                    if medida_p != "un":
+                        st.session_state.q_loc[prod_full]['gr'] = st.number_input(
+                            "Gr", min_value=0.0, step=50.0, 
+                            key=f"loc_g_{prod_full}_{st.session_state.v_rk}", 
+                            value=float(st.session_state.q_loc[prod_full]['gr']), 
+                            label_visibility="collapsed"
+                        )
+                st.markdown("---")
+
+            # Cálculo en tiempo real
             tot_c = 0.0
             tot_ahor = 0.0
             carrito_vend = []
             
-            if not edited_df_loc.empty:
-                for idx, row in edited_df_loc.iterrows():
-                    p = row["Producto"]
-                    k = row["Kg_Un"]
-                    g = row["Gramos"]
-                    
-                    st.session_state.q_loc[p] = {'kg_un': k, 'gr': g}
-                    
-                    m = MEDIDAS.get(p, "kg")
-                    c = k if m == "un" else k + (g / 1000.0)
-                    if c > 0:
-                        pr_orig = PRECIOS.get(p, 0)
-                        desc_p = DESCUENTOS.get(p, 0)
-                        pr_fin = pr_orig * (1 - desc_p/100)
-                        tot_c += c * pr_fin
-                        tot_ahor += c * (pr_orig - pr_fin)
-                        carrito_vend.append({
-                            "producto": NOMBRES.get(p, p),
-                            "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
-                            "subtotal": c * pr_fin, "ahorro": c * (pr_orig - pr_fin), "tipo": "Propio"
-                        })
+            for p, dict_q in st.session_state.q_loc.items():
+                m = MEDIDAS.get(p, "kg")
+                c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                if c > 0:
+                    pr_orig = PRECIOS.get(p, 0)
+                    desc_p = DESCUENTOS.get(p, 0)
+                    pr_fin = pr_orig * (1 - desc_p/100)
+                    tot_c += c * pr_fin
+                    tot_ahor += c * (pr_orig - pr_fin)
+                    carrito_vend.append({
+                        "producto": NOMBRES.get(p, p),
+                        "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
+                        "subtotal": c * pr_fin, "ahorro": c * (pr_orig - pr_fin), "tipo": "Propio"
+                    })
                     
             st.markdown(f"### Total a Pagar: **${tot_c:,.1f}**")
             if tot_ahor > 0: st.success(f"🎉 Ahorro Total del Cliente: ${tot_ahor:,.1f}")
-            
-            if st.button("🚀 Enviar a Caja", type="primary", use_container_width=True):
+            st.divider()
+
+            if st.button("🚀 Enviar a Caja (Final)", type="primary", use_container_width=True):
                 if not st.session_state.cli_nombre:
                     st.error("⚠️ Falta el nombre del cliente en el Paso 1.")
                 elif tot_c <= 0:
-                    st.warning("⚠️ La tabla está en cero. Añade kilos o unidades a un producto.")
+                    st.warning("⚠️ No has seleccionado ningún producto.")
                 else:
                     ahora = datetime.now(TZ_UY)
                     cel_f = limpiar_y_formatear_celular(st.session_state.cli_celular)
@@ -833,7 +848,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 st.session_state.modo_tomar = "🛍️ Venta Local"
                                 st.session_state.v_rk += 1
                                 
-                                q_dict = {pr: {'kg_un': 0, 'gr': 0} for pr in productos_ord_loc}
+                                q_dict = {pr: {'kg_un': 0, 'gr': 0.0} for pr in productos_ord_loc}
                                 rev_nom = {v: k for k, v in NOMBRES.items()}
                                 try:
                                     items_rec = json.loads(p['json']) if p['json'] else p['items']
@@ -924,7 +939,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 st.session_state.modo_tomar = "🛍️ Venta Local"
                                 st.session_state.v_rk += 1
                                 
-                                q_dict = {pr: {'kg_un': 0, 'gr': 0} for pr in productos_ord_loc}
+                                q_dict = {pr: {'kg_un': 0, 'gr': 0.0} for pr in productos_ord_loc}
                                 rev_nom = {v: k for k, v in NOMBRES.items()}
                                 try:
                                     items_rec = json.loads(pl['json']) if pl['json'] else pl['items']
