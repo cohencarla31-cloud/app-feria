@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS DE PRECISIÓN MÓVIL
+# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTA ESTABILIDAD
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -18,12 +18,16 @@ st.markdown("""
     div.row-widget.stRadio > div > label { background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; font-size: 16px; border: 2px solid #ddd; cursor: pointer; margin: 2px; }
     div.row-widget.stRadio > div > label:hover { border-color: #66BB6A; background-color: #e8f5e9; }
     
-    html, body, [data-testid="stAppViewContainer"] {
+    html, body, [data-testid="stAppViewContainer"], .stApp {
         overscroll-behavior-y: none !important;
         -webkit-overflow-scrolling: touch;
+        overflow-x: hidden !important; 
     }
     
-    [data-testid="stMainBlockContainer"] { padding-bottom: 180px !important; }
+    [data-testid="stMainBlockContainer"] { 
+        padding-bottom: 180px !important; 
+        overflow-x: hidden !important;
+    }
     
     [data-testid="stSidebar"], [data-testid="collapsedControl"], footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
@@ -38,25 +42,10 @@ st.markdown("""
         background-color: #81C784 !important;
         border-color: #81C784 !important;
     }
-
-    /* ESTILO PARA EL BOTÓN FLOTANTE FIJO */
-    .btn-flotante-carrito {
-        position: fixed;
-        bottom: 70px;
-        right: 15px;
-        z-index: 99999;
-        background-color: #66BB6A;
-        color: white;
-        padding: 10px 18px;
-        border-radius: 25px;
-        font-weight: bold;
-        box-shadow: 0px 4px 12px rgba(0,0,0,0.3);
-        border: none;
-        cursor: pointer;
-    }
     </style>
     
     <script>
+    /* Mantener la app activa cuando cambias de ventana en el celular */
     const borrarFullscreen = () => {
         const elementos = document.querySelectorAll('a, button, div, span, svg');
         elementos.forEach(el => {
@@ -270,7 +259,7 @@ if "feria" in query_params:
     link_excel = obtener_datos_cliente(codigo_feria)
     
     if link_excel == "SUSPENDIDO":
-        st.error("🚫 Esta tienda se encuentra temporalmente inactiva.")
+        st.error("🚫 Эта tienda se encuentra temporalmente inactiva.")
         st.stop()
     elif not link_excel:
         st.error("⚠️ Error de conexión o código de feria inválido. Por favor, actualiza la página.")
@@ -326,7 +315,7 @@ if "feria" in query_params:
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
             
-            # --- BOTÓN FLOTANTE ESTILO CARRITO DE COMPRAS ---
+            # --- BOTÓN SUPERIOR PARA REVISAR CARRITO ---
             if st.button("🛒 VER CARRITO Y REVISAR ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
@@ -418,7 +407,6 @@ if "feria" in query_params:
             tot_web = 0.0
             idx_to_del = []
             
-            # CORRECCIÓN QUIRÚRGICA: Cruz ultra pegada a la izquierda del texto del producto
             for idx_cw, itw in enumerate(st.session_state.carrito_web):
                 col_cruz, col_txt = st.columns([0.18, 0.82])
                 with col_cruz:
@@ -1053,7 +1041,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         st.write(f"👤 **Cliente:** {pw['cliente']} | 📍 **Dir:** {pw['direccion']} | **Total Est.:** ${pw['total']:,.1f}")
                         st.write(f"📦 **Detalle:** {pw['detalle']}")
                         
-                        msg_cuenta = f"👋 Hola {pw['cliente']}, tu pedido de *{nombre_empresa}* ya está listo y pesado. El total de tu cuenta es *${pw['total']:,.1f}*. ¡Vamos en camino a entregártelo! 💚"
+                        msg_cuenta = f"👋 Hola {pw['cliente']}, tu pedido de *{nombre_empresa}* ya está listo y pesado. El total de tu cuenta es *${pw['total']:,.1f}*. ¡Muchas gracias por elegirnos! 💚"
                         st.link_button("📲 Enviar Cuenta del Pedido por WhatsApp", f"https://wa.me/{limpiar_y_formatear_celular(pw['celular'])}?text={urllib.parse.quote(msg_cuenta)}", type="primary", use_container_width=True)
             except Exception as e: st.error(f"Error: {e}")
     idx += 1
@@ -1473,7 +1461,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
         
         **2. 🌐 PEDIDOS WEB (Clientes):**
         * Los clientes entran por tu enlace web, eligen sus verduras y envían el pedido. 
-        * En **Estado Pedidos Web**, el cajero puede ver esos pedidos al instante y mandarles un WhatsApp de "Pedido Recibido" al cliente para que se queden tranquilos de que ya se está procesando.
+        * In **Estado Pedidos Web**, el cajero puede ver esos pedidos al instante y mandarles un WhatsApp de "Pedido Recibido" al cliente para que se queden tranquilos de que ya se está procesando.
         * En **Ajustar Pedido Web**, el vendedor toma ese pedido original, pesa la mercadería en la balanza y ajusta los gramos exactos antes de enviarlo a Caja para cobrar.
         
         **3. 💰 CAJERO (Cobrar):**
@@ -1482,7 +1470,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
         
         **4. 🛵 REPARTIDOR / LOGÍSTICA:**
         * En **Entregas a Domicilio**, verán todos los pedidos que tienen dirección asignada.
-        * Una vez que lo entregan, presionan "Markar como Entregado".
+        * Una vez que lo entregan, presionan "Marcar como Entregado".
         
         **5. 💳 SALDOS Y DEUDAS:**
         * Los pedidos "A Cuenta" aparecen aquí. El cajero puede enviar recordatorios de pago y registrar cuando el cliente viene a saldar su deuda.
