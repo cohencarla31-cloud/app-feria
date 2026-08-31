@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y BOTÓN FLOTANTE REAL (CSS POSITION: FIXED)
+# 1. CONFIGURACIÓN INICIAL Y BOTÓN FLOTANTE REAL HTML/JS
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -37,22 +37,6 @@ st.markdown("""
     button[kind="primary"]:hover {
         background-color: #81C784 !important;
         border-color: #81C784 !important;
-    }
-
-    /* ESTILO PARA EL CONTENEDOR FLOTANTE FIJO EN LA PANTALLA DEL CELULAR */
-    .floating-box {
-        position: fixed;
-        bottom: 75px;
-        right: 15px;
-        z-index: 999999;
-        background-color: #66BB6A;
-        color: white;
-        padding: 10px 18px;
-        border-radius: 30px;
-        font-weight: bold;
-        box-shadow: 0px 4px 12px rgba(0,0,0,0.3);
-        text-align: center;
-        cursor: pointer;
     }
     </style>
     
@@ -326,8 +310,19 @@ if "feria" in query_params:
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
             
-            # --- BOTÓN FLOTANTE FIJO (WEB) ---
-            if st.button("🛒 VER CARRITO FLOTANTE ➡️", type="primary", use_container_width=True):
+            # --- BOTÓN FLOTANTE REAL HTML (WEB) ---
+            st.markdown("""
+                <div style="position: fixed; bottom: 70px; right: 15px; z-index: 999999;">
+                    <form action="" method="get">
+                        <button type="submit" name="ir_carrito" value="1" style="background-color: #66BB6A; color: white; border: none; padding: 12px 20px; border-radius: 30px; font-weight: bold; font-size: 15px; box-shadow: 0px 4px 12px rgba(0,0,0,0.4); cursor: pointer;">
+                            🛒 VER CARRITO ➡️
+                        </button>
+                    </form>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            if st.query_params.get("ir_carrito") == "1":
+                st.query_params.clear()
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
                     m = medidas.get(p, "kg")
@@ -341,7 +336,6 @@ if "feria" in query_params:
                             "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
                             "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
                         })
-                        
                 if not st.session_state.carrito_web:
                     st.warning("⚠️ Debes sumar cantidades a al menos un producto.")
                 else:
@@ -686,8 +680,19 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
                 
-                # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO (VENTA LOCAL) ---
-                if st.button("🚀 ENVIAR A CAJA (Acceso Rápido)", type="primary", use_container_width=True):
+                # --- BOTÓN FLOTANTE REAL HTML (VENTA LOCAL) ---
+                st.markdown("""
+                    <div style="position: fixed; bottom: 70px; right: 15px; z-index: 999999;">
+                        <form action="" method="get">
+                            <button type="submit" name="enviar_caja_rapido" value="1" style="background-color: #66BB6A; color: white; border: none; padding: 12px 20px; border-radius: 30px; font-weight: bold; font-size: 15px; box-shadow: 0px 4px 12px rgba(0,0,0,0.4); cursor: pointer;">
+                                🚀 ENVIAR A CAJA ⚡
+                            </button>
+                        </form>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                if st.query_params.get("enviar_caja_rapido") == "1":
+                    st.query_params.clear()
                     tot_c_rapido = 0.0
                     carrito_vend_rapido = []
                     if 'q_loc' in st.session_state:
