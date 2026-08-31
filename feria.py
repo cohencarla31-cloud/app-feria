@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTA ESTABILIDAD
+# 1. CONFIGURACIÓN INICIAL Y BOTÓN FLOTANTE REAL (CSS POSITION: FIXED)
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -18,16 +18,12 @@ st.markdown("""
     div.row-widget.stRadio > div > label { background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; font-size: 16px; border: 2px solid #ddd; cursor: pointer; margin: 2px; }
     div.row-widget.stRadio > div > label:hover { border-color: #66BB6A; background-color: #e8f5e9; }
     
-    html, body, [data-testid="stAppViewContainer"], .stApp {
+    html, body, [data-testid="stAppViewContainer"] {
         overscroll-behavior-y: none !important;
         -webkit-overflow-scrolling: touch;
-        overflow-x: hidden !important; 
     }
     
-    [data-testid="stMainBlockContainer"] { 
-        padding-bottom: 180px !important; 
-        overflow-x: hidden !important;
-    }
+    [data-testid="stMainBlockContainer"] { padding-bottom: 200px !important; }
     
     [data-testid="stSidebar"], [data-testid="collapsedControl"], footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
@@ -42,10 +38,25 @@ st.markdown("""
         background-color: #81C784 !important;
         border-color: #81C784 !important;
     }
+
+    /* ESTILO PARA EL CONTENEDOR FLOTANTE FIJO EN LA PANTALLA DEL CELULAR */
+    .floating-box {
+        position: fixed;
+        bottom: 75px;
+        right: 15px;
+        z-index: 999999;
+        background-color: #66BB6A;
+        color: white;
+        padding: 10px 18px;
+        border-radius: 30px;
+        font-weight: bold;
+        box-shadow: 0px 4px 12px rgba(0,0,0,0.3);
+        text-align: center;
+        cursor: pointer;
+    }
     </style>
     
     <script>
-    /* Mantener la app activa cuando cambias de ventana en el celular */
     const borrarFullscreen = () => {
         const elementos = document.querySelectorAll('a, button, div, span, svg');
         elementos.forEach(el => {
@@ -259,7 +270,7 @@ if "feria" in query_params:
     link_excel = obtener_datos_cliente(codigo_feria)
     
     if link_excel == "SUSPENDIDO":
-        st.error("🚫 Эта tienda se encuentra temporalmente inactiva.")
+        st.error("🚫 Esta tienda se encuentra temporalmente inactiva.")
         st.stop()
     elif not link_excel:
         st.error("⚠️ Error de conexión o código de feria inválido. Por favor, actualiza la página.")
@@ -315,8 +326,8 @@ if "feria" in query_params:
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
             
-            # --- BOTÓN SUPERIOR PARA REVISAR CARRITO ---
-            if st.button("🛒 VER CARRITO Y REVISAR ➡️", type="primary", use_container_width=True):
+            # --- BOTÓN FLOTANTE FIJO (WEB) ---
+            if st.button("🛒 VER CARRITO FLOTANTE ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
                     m = medidas.get(p, "kg")
@@ -675,7 +686,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
                 
-                # --- BOTÓN DE ACCESO RÁPIDO (ARRIBA EN VENTA LOCAL) ---
+                # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO (VENTA LOCAL) ---
                 if st.button("🚀 ENVIAR A CAJA (Acceso Rápido)", type="primary", use_container_width=True):
                     tot_c_rapido = 0.0
                     carrito_vend_rapido = []
@@ -1115,44 +1126,42 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         msg_rec = f"👋 Hola {cliente_elegido}, desde *{nombre_empresa}* te recordamos que tu saldo pendiente de pago es de *${saldo_actual:,.1f}*. ¡Muchas gracias!"
                         st.link_button("📲 Enviar Recordatorio de Deuda (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_rec)}", use_container_width=True)
                         
-                        with st.form(key=f"form_pago_{cliente_elegido}"):
-                            pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(saldo_actual), step=100.0, key="pago_parc_input")
-                            submit_pago = st.form_submit_button("💵 Registrar Pago / Saldar Cuenta", type="primary")
-                            
-                            if submit_pago:
-                                if pago_parcial > 0:
-                                    nuevo_saldo = saldo_actual - pago_parcial
-                                    gc = conectar_google()
-                                    ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
-                                    
-                                    if nuevo_saldo <= 0.01:
-                                        msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
-                                        upds = []
-                                        for pd_fiado in info_c["pedidos"]:
-                                            if "abono" not in pd_fiado['estado'].lower() and "abono" not in pd_fiado['detalle'].lower():
-                                                col_e = chr(65 + pd_fiado['idx_est'])
-                                                new_est_f = "Web - Cobrado" if "Web" in pd_fiado['estado'] else "Cobrado"
-                                                for fi in pd_fiado['filas']:
-                                                    upds.append({'range': f'{col_e}{fi}', 'values': [[new_est_f]]})
-                                        if upds: ws.batch_update(upds)
-                                    else:
-                                        msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente de ${nuevo_saldo:,.1f}."
-                                        ahora = datetime.now(TZ_UY)
-                                        ws.append_row([
-                                            ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
-                                            st.session_state.usuario_logueado, cliente_elegido, 
-                                            "Abono a Cuenta", 1, -pago_parcial, info_c['celular'], 
-                                            "Efectivo", "Cuenta Corriente", "", 0, "[]"
-                                        ])
-                                    
-                                    limpiar_cache_ventas()
-                                    time.sleep(1.5)
-                                    
-                                    st.session_state.msg_cobro = "✅ ¡Pago registrado con éxito!"
-                                    st.session_state.link_cobro = f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}"
-                                    st.rerun()
+                        pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(saldo_actual), step=100.0, key=f"pago_parc_{cliente_elegido}")
+                        
+                        if st.button("💵 Registrar Pago / Saldar Cuenta", type="primary", key=f"btn_reg_pago_{cliente_elegido}"):
+                            if pago_parcial > 0:
+                                nuevo_saldo = saldo_actual - pago_parcial
+                                gc = conectar_google()
+                                ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                                
+                                if nuevo_saldo <= 0.01:
+                                    msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
+                                    upds = []
+                                    for pd_fiado in info_c["pedidos"]:
+                                        if "abono" not in pd_fiado['estado'].lower() and "abono" not in pd_fiado['detalle'].lower():
+                                            col_e = chr(65 + pd_fiado['idx_est'])
+                                            new_est_f = "Web - Cobrado" if "Web" in pd_fiado['estado'] else "Cobrado"
+                                            for fi in pd_fiado['filas']:
+                                                upds.append({'range': f'{col_e}{fi}', 'values': [[new_est_f]]})
+                                    if upds: ws.batch_update(upds)
                                 else:
-                                    st.warning("⚠️ Ingresa un monto mayor a 0 para registrar el pago.")
+                                    msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente de ${nuevo_saldo:,.1f}."
+                                    ahora = datetime.now(TZ_UY)
+                                    ws.append_row([
+                                        ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
+                                        st.session_state.usuario_logueado, cliente_elegido, 
+                                        "Abono a Cuenta", 1, -pago_parcial, info_c['celular'], 
+                                        "Efectivo", "Cuenta Corriente", "", 0, "[]"
+                                    ])
+                                
+                                limpiar_cache_ventas()
+                                time.sleep(1.5)
+                                
+                                st.session_state.msg_cobro = "✅ ¡Pago registrado con éxito!"
+                                st.session_state.link_cobro = f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}"
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ Ingresa un monto mayor a 0 para registrar el pago.")
             
             if st.session_state.get('msg_cobro'):
                 st.success(st.session_state.msg_cobro)
@@ -1181,7 +1190,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         st.write(f"📅 **Fecha:** {pw['fecha']} {pw['hora']} | 📍 **Dirección:** {pw['direccion']}")
                         st.write(f"💰 **Total Estimado:** ${pw['total']:,.1f}")
                         
-                        msg_ack = f"👋 Hola {pw['cliente']}, hemos recibido tu pedido. A la brevedad lo armaremos y te lo enviaremos. Gracias por elegirnos 💚.\n\n📦 *Tu Pedido:*\n{pw['detalle']}"
+                        msg_ack = f"👋 Hola {pw['cliente']}, tu pedido de *{nombre_empresa}* ya está listo y pesado. El total de tu cuenta es *${pw['total']:,.1f}*. ¡Muchas gracias por elegirnos! 💚"
                         st.link_button("📲 Confirmar Recepción al Cliente (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(pw['celular'])}?text={urllib.parse.quote(msg_ack)}", type="primary", use_container_width=True)
                         st.divider()
         except Exception as e: st.error(f"Error: {e}")
@@ -1461,7 +1470,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
         
         **2. 🌐 PEDIDOS WEB (Clientes):**
         * Los clientes entran por tu enlace web, eligen sus verduras y envían el pedido. 
-        * In **Estado Pedidos Web**, el cajero puede ver esos pedidos al instante y mandarles un WhatsApp de "Pedido Recibido" al cliente para que se queden tranquilos de que ya se está procesando.
+        * En **Estado Pedidos Web**, el cajero puede ver esos pedidos al instante y mandarles un WhatsApp de "Pedido Recibido" al cliente para que se queden tranquilos de que ya se está procesando.
         * En **Ajustar Pedido Web**, el vendedor toma ese pedido original, pesa la mercadería en la balanza y ajusta los gramos exactos antes de enviarlo a Caja para cobrar.
         
         **3. 💰 CAJERO (Cobrar):**
