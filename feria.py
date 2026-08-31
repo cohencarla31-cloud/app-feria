@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y MENÚ AMPLIADO
+# 1. CONFIGURACIÓN INICIAL Y CSS LIMPIO
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -54,31 +54,13 @@ st.markdown("""
         background-color: #66BB6A !important;
         border-color: #66BB6A !important;
         color: white !important;
+        font-weight: bold !important;
+        font-size: 16px !important;
+        padding: 10px !important;
     }
     button[kind="primary"]:hover {
         background-color: #81C784 !important;
         border-color: #81C784 !important;
-    }
-    
-    @media (max-width: 600px) {
-        div[data-testid="stHorizontalBlock"] {
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 8px !important;
-        }
-        div[data-testid="column"] {
-            min-width: 0 !important;
-            padding: 0 !important;
-        }
-        div[data-baseweb="input"] button {
-            width: 25px !important;
-            padding: 0 !important;
-        }
-        label[data-testid="stWidgetLabel"] p {
-            font-size: 12px !important;
-            color: #444 !important;
-            white-space: nowrap;
-        }
     }
     </style>
     
@@ -288,7 +270,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, medidas_planas, stock_inicial
 
 # ==========================================
-# 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS)
+# 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS) - PRIORIDAD ABSOLUTA
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -351,9 +333,9 @@ if "feria" in query_params:
 
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
-            st.info("💡 **Guía de pesos para evitar mareos:**\n\n🔹 **Kg:** Sube de a medio kilo. (Ej: **1.5** = Un kilo y medio).\n🔹 **Gramos:** Úsalo solo para afinar cantidades (Ej: **250** gramos).")
+            st.warning("⚠️ **Importante:** Selecciona **todos** los productos de la lista, y recién al finalizar presiona el botón de **'Ir a mi carrito'**.")
             
-            # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO AL CARRITO ---
+            # --- BOTÓN ANCHO DE IR AL CARRITO (ARRIBA) ---
             if st.button("🛒 Ir a mi carrito ➡️", type="primary", use_container_width=True, key="btn_cart_top_web"):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
@@ -390,34 +372,33 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
+                # Nombre del producto y precio
                 st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 
-                c1, c2 = st.columns(2)
-                with c1:
-                    if medida_p == "un":
-                        st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
-                            "Unidades", min_value=0.0, step=1.0, 
-                            value=float(st.session_state.q_web[prod_full]['kg_un']), 
-                            key=f"w_k_{prod_full}_{st.session_state.web_rk}"
-                        )
-                    else:
-                        st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
-                            "Kg (Ej: 1.5)", min_value=0.0, step=0.5, 
-                            value=float(st.session_state.q_web[prod_full]['kg_un']), 
-                            key=f"w_k_{prod_full}_{st.session_state.web_rk}"
-                        )
-                with c2:
-                    if medida_p != "un":
-                        st.session_state.q_web[prod_full]['gr'] = st.number_input(
-                            "Gramos (Ej: 250)", min_value=0.0, step=25.0, 
-                            value=float(st.session_state.q_web[prod_full]['gr']), 
-                            key=f"w_g_{prod_full}_{st.session_state.web_rk}"
-                        )
-                st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
+                # CASILLAS UNA ABAJO DE LA OTRA (SIN COLUMNAS) Y TEXTOS SUPER EXPLICATIVOS
+                if medida_p == "un":
+                    st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
+                        "Cantidad (Unidades)", min_value=0.0, step=1.0, 
+                        value=float(st.session_state.q_web[prod_full]['kg_un']), 
+                        key=f"w_k_{prod_full}_{st.session_state.web_rk}"
+                    )
+                else:
+                    st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
+                        "Kilos (Ej: 0.5 es medio kilo, 1.5 es kilo y medio)", min_value=0.0, step=0.5, 
+                        value=float(st.session_state.q_web[prod_full]['kg_un']), 
+                        key=f"w_k_{prod_full}_{st.session_state.web_rk}"
+                    )
+                    st.session_state.q_web[prod_full]['gr'] = st.number_input(
+                        "Gramos extra (Ej: 250)", min_value=0.0, step=25.0, 
+                        value=float(st.session_state.q_web[prod_full]['gr']), 
+                        key=f"w_g_{prod_full}_{st.session_state.web_rk}"
+                    )
+                
+                st.markdown("<hr style='margin: 12px 0 16px 0; border: 1px solid #eee;'>", unsafe_allow_html=True)
 
             st.divider()
             
-            # --- BOTÓN INFERIOR DE ACCESO RÁPIDO AL CARRITO ---
+            # --- BOTÓN ANCHO DE IR AL CARRITO (ABAJO) ---
             if st.button("🛒 Ir a mi carrito ➡️", type="primary", use_container_width=True, key="btn_cart_bottom_web"):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
@@ -746,10 +727,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 st.divider()
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
-                st.info("💡 **Guía de pesos:**\n\n🔹 **Kg:** Sube de a medio kilo. (Ej: **1.5** = Un kilo y medio).\n🔹 **Gramos:** Sube de a 25. Úsalo para afinar (Ej: **250** gramos).")
+                st.warning("⚠️ **Importante:** Selecciona **todos** los productos de la lista, y recién al finalizar presiona el botón de **'Enviar a Caja'**.")
                 
-                # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO A CAJA (VENTA LOCAL) ---
-                if st.button("🚀 ENVIAR A CAJA", type="primary", use_container_width=True, key="btn_caja_top_loc"):
+                # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO A CAJA ---
+                if st.button("🚀 ENVIAR A CAJA (Acceso Rápido)", type="primary", use_container_width=True, key="btn_caja_top_loc"):
                     tot_c_rapido = 0.0
                     carrito_vend_rapido = []
                     if 'q_loc' in st.session_state:
@@ -813,30 +794,27 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    st.markdown(f"<div style='margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if medida_p == "un":
-                            st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                                "Unidades", min_value=0.0, step=1.0, 
-                                key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
-                                value=float(st.session_state.q_loc[prod_full]['kg_un'])
-                            )
-                        else:
-                            st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                                "Kg (Ej: 1.5)", min_value=0.0, step=0.5, 
-                                key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
-                                value=float(st.session_state.q_loc[prod_full]['kg_un'])
-                            )
-                    with c2:
-                        if medida_p != "un":
-                            st.session_state.q_loc[prod_full]['gr'] = st.number_input(
-                                "Gramos (Ej: 250)", min_value=0.0, step=25.0, 
-                                key=f"loc_g_{prod_full}_{st.session_state.v_rk}", 
-                                value=float(st.session_state.q_loc[prod_full]['gr'])
-                            )
-                    st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
+                    # CASILLAS APILADAS UNA ABAJO DE LA OTRA (Sin columnas)
+                    if medida_p == "un":
+                        st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
+                            "Cantidad (Unidades)", min_value=0.0, step=1.0, 
+                            key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
+                            value=float(st.session_state.q_loc[prod_full]['kg_un'])
+                        )
+                    else:
+                        st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
+                            "Kilos (Ej: 0.5 es medio kilo, 1.5 es kilo y medio)", min_value=0.0, step=0.5, 
+                            key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
+                            value=float(st.session_state.q_loc[prod_full]['kg_un'])
+                        )
+                        st.session_state.q_loc[prod_full]['gr'] = st.number_input(
+                            "Gramos extra (Ej: 250)", min_value=0.0, step=25.0, 
+                            key=f"loc_g_{prod_full}_{st.session_state.v_rk}", 
+                            value=float(st.session_state.q_loc[prod_full]['gr'])
+                        )
+                    st.markdown("<hr style='margin: 12px 0 16px 0; border: 1px solid #eee;'>", unsafe_allow_html=True)
 
                 tot_c = 0.0
                 tot_ahor = 0.0
@@ -861,7 +839,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 if tot_ahor > 0: st.success(f"🎉 Ahorro Total del Cliente: ${tot_ahor:,.1f}")
                 st.divider()
 
-                if st.button("🚀 Enviar a Caja", type="primary", use_container_width=True, key="btn_caja_bottom_loc"):
+                if st.button("🚀 Enviar a Caja (Final)", type="primary", use_container_width=True, key="btn_caja_bottom_loc"):
                     if not st.session_state.cli_nombre:
                         st.error("⚠️ Falta el nombre del cliente en el Paso 1.")
                     elif tot_c <= 0:
@@ -915,10 +893,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 
                                 st.markdown(f"**Pidió:** {it['producto']}  *(Cant aprox: {it['cantidad']})*")
                                 
-                                c_k, c_g = st.columns(2)
                                 if medida_p == "un":
-                                    with c_k:
-                                        p_real = st.number_input(f"Real (un):", value=float(it['cantidad']), step=1.0, key=f"w_un_{idx_w}_{idx_item}")
+                                    p_real = st.number_input(f"Real (un):", value=float(it['cantidad']), step=1.0, key=f"w_un_{idx_w}_{idx_item}")
                                 else:
                                     val = float(it['cantidad'])
                                     k_in = float(int(val))
@@ -928,10 +904,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                         rem -= 0.5
                                     g_in = rem * 1000
                                     
-                                    with c_k: 
-                                        kr = st.number_input("Kilos", value=float(k_in), step=0.5, key=f"w_k_{idx_w}_{idx_item}")
-                                    with c_g: 
-                                        gr = st.number_input("Gramos", value=float(g_in), step=25.0, key=f"w_g_{idx_w}_{idx_item}")
+                                    kr = st.number_input("Kilos (Ej: 0.5, 1.5)", value=float(k_in), step=0.5, key=f"w_k_{idx_w}_{idx_item}")
+                                    gr = st.number_input("Gramos extra", value=float(g_in), step=25.0, key=f"w_g_{idx_w}_{idx_item}")
                                     p_real = kr + (gr / 1000.0)
                                 
                                 pr_u = PRECIOS.get(it["producto"], PRECIOS.get(NOMBRES.get(it["producto"], it["producto"]), 100))
