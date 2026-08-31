@@ -8,12 +8,33 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y ESTABILIDAD
+# 1. CONFIGURACIÓN INICIAL Y BOTONES DE MENÚ AMPLIADOS
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
+    /* BOTONES DE PESTAÑAS (TABS) SUPER GRANDES Y CÓMODOS PARA EL CELULAR */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 6px;
+        justify-content: center;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 55px;
+        white-space: pre-wrap;
+        background-color: #f0f2f6;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 700;
+        padding: 0 15px;
+        border: 2px solid #ddd;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #e8f5e9 !important;
+        border-color: #66BB6A !important;
+        color: #2e7b32 !important;
+    }
+
     div.row-widget.stRadio > div { flex-wrap: wrap; justify-content: center; gap: 8px; }
     div.row-widget.stRadio > div > label { background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; font-size: 16px; border: 2px solid #ddd; cursor: pointer; margin: 2px; }
     div.row-widget.stRadio > div > label:hover { border-color: #66BB6A; background-color: #e8f5e9; }
@@ -274,7 +295,7 @@ if "feria" in query_params:
         with st.expander("ℹ️ Pasos para tu Pedido Online", expanded=(st.session_state.web_step == 1)):
             st.markdown("""
             1️⃣ **Datos:** Completa tu nombre, celular y dirección.
-            2️⃣ **Productos:** Usa las flechitas o escribe la cantidad debajo de cada producto.
+            2️⃣ **Productos:** Elige **TODO** lo que vas a llevar y luego avanza.
             3️⃣ **Revisión:** Verifica el total de tu compra.
             4️⃣ **Confirmar:** Envía el WhatsApp para asegurar el pedido.
             """)
@@ -309,13 +330,13 @@ if "feria" in query_params:
 
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
+            st.warning("⚠️ **Importante:** Selecciona **todos** los productos que quieras llevar recorriendo la lista, y recién al finalizar presiona el botón de **'Revisar Carrito'**.")
             
-            # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO AL CARRITO ---
             if st.button("🛒 VER CARRITO Y REVISAR ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
                     m = medidas.get(p, "kg")
-                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + dict_q['medio_kg'] * 0.5 + (dict_q['gr'] / 1000.0)
                     if c > 0:
                         pr_orig = precios.get(p, 0)
                         desc_p = descuentos.get(p, 0)
@@ -340,7 +361,7 @@ if "feria" in query_params:
                 if filtro_txt and filtro_txt not in prod_full.lower(): continue
                 
                 if prod_full not in st.session_state.q_web:
-                    st.session_state.q_web[prod_full] = {'kg_un': 0, 'gr': 0.0}
+                    st.session_state.q_web[prod_full] = {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0}
                 
                 medida_p = medidas.get(prod_full, "kg")
                 precio_orig = precios.get(prod_full, 0)
@@ -349,17 +370,29 @@ if "feria" in query_params:
                 
                 st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 
-                c1, c2 = st.columns(2)
-                with c1:
+                if medida_p == "un":
                     st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
-                        "Kg/Unid", min_value=0, step=1, 
+                        "Cantidad (Unidades)", min_value=0, step=1, 
                         value=int(st.session_state.q_web[prod_full]['kg_un']), 
                         key=f"w_k_{prod_full}_{st.session_state.web_rk}"
                     )
-                with c2:
-                    if medida_p != "un":
+                else:
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
+                            "Kilos (Entros)", min_value=0, step=1, 
+                            value=int(st.session_state.q_web[prod_full]['kg_un']), 
+                            key=f"w_k_{prod_full}_{st.session_state.web_rk}"
+                        )
+                    with c2:
+                        st.session_state.q_web[prod_full]['medio_kg'] = st.number_input(
+                            "Medios (0.5kg)", min_value=0, step=1, max_value=1,
+                            value=int(st.session_state.q_web[prod_full]['medio_kg']), 
+                            key=f"w_m_{prod_full}_{st.session_state.web_rk}"
+                        )
+                    with c3:
                         st.session_state.q_web[prod_full]['gr'] = st.number_input(
-                            "Gramos", min_value=0.0, step=25.0, 
+                            "Gramos (Afinar)", min_value=0.0, step=25.0, 
                             value=float(st.session_state.q_web[prod_full]['gr']), 
                             key=f"w_g_{prod_full}_{st.session_state.web_rk}"
                         )
@@ -367,12 +400,11 @@ if "feria" in query_params:
 
             st.divider()
             
-            # --- BOTÓN INFERIOR DE ACCESO RÁPIDO AL CARRITO ---
             if st.button("🛒 Revisar Carrito ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
                     m = medidas.get(p, "kg")
-                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + dict_q['medio_kg'] * 0.5 + (dict_q['gr'] / 1000.0)
                     if c > 0:
                         pr_orig = precios.get(p, 0)
                         desc_p = descuentos.get(p, 0)
@@ -420,7 +452,7 @@ if "feria" in query_params:
                     rem_item = st.session_state.carrito_web.pop(d)
                     pf = rev_nom_web.get(rem_item['producto'], rem_item['producto'])
                     if pf in st.session_state.q_web:
-                        st.session_state.q_web[pf] = {'kg_un': 0, 'gr': 0.0}
+                        st.session_state.q_web[pf] = {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0}
                 st.rerun()
                 
             st.markdown("---")
@@ -551,7 +583,7 @@ if st.session_state.usuario_logueado is None:
                             valido = df_usuarios[(df_usuarios[col_usu].str.lower() == usuario_intento.lower()) & (df_usuarios[col_cla] == clave_intento)]
                             if not valido.empty:
                                 st.session_state.usuario_logueado = usuario_intento
-                                rol_bruto = valido.iloc[0].get(col_rol, 'Vendedor') if rol_bruto else 'Vendedor'
+                                rol_bruto = valido.iloc[0].get(col_rol, 'Vendedor') if col_rol else 'Vendedor'
                                 rol_limpio = str(rol_bruto).strip().capitalize()
                                 if rol_limpio not in ["Admin", "Cajero", "Vendedor"]: rol_limpio = "Vendedor"
                                 st.session_state.rol_logueado = rol_limpio
@@ -584,9 +616,9 @@ with st.sidebar:
 st.title(f"🏢 {nombre_empresa}")
 
 # ==========================================
-# 5. PESTAÑAS Y ROLES ORDENADOS
+# 5. PESTAÑAS Y ROLES ORDENADOS (GUÍA DE USO PRIMERO)
 # ==========================================
-tabs_nombres = []
+tabs_nombres = ["📖 Guía de Uso"]
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]: 
     tabs_nombres.append("📝 Tomar Pedido")
 if st.session_state.rol_logueado in ["Admin", "Cajero"]: 
@@ -599,14 +631,40 @@ if st.session_state.rol_logueado == "Admin":
     tabs_nombres.append("📈 Reportes Pro (Stock y Ventas)")
     tabs_nombres.append("📥 Reportes Pro (Saldos Pendientes)")
 
-if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
-    tabs_nombres.append("📖 Guía de Uso")
-
 tabs = st.tabs(tabs_nombres)
 idx = 0
 
 # =======================================================
-# PESTAÑA 1: TOMAR PEDIDO 
+# PESTAÑA 1: GUÍA DE USO (AHORA AL PRINCIPIO)
+# =======================================================
+with tabs[idx]:
+    st.write("### 📖 Guía Rápida de la App")
+    st.info("Esta aplicación sincroniza a todo el equipo en tiempo real. ¡Si todos cumplen su rol, el negocio vuela!")
+    st.markdown("""
+    **1. 🛍️ VENDEDOR (Tomar Pedido):**
+    * Busca al cliente, anota las cantidades y presiona **Enviar a Caja**.
+    * **Importante:** Apenas se envía, te aparecerá un botón verde para mandarle un WhatsApp al Cajero. ¡Tócalo siempre para avisar que hay un nuevo pedido esperando!
+    
+    **2. 🌐 PEDIDOS WEB (Clientes):**
+    * Los clientes entran por tu enlace web, eligen sus verduras y envían el pedido. 
+    * En **Estado Pedidos Web**, el cajero puede ver esos pedidos al instante y mandarles un WhatsApp de "Pedido Recibido" al cliente para que se queden tranquilos de que ya se está procesando.
+    * En **Ajustar Pedido Web**, el vendedor toma ese pedido original, pesa la mercadería en la balanza y ajusta los gramos exactos antes de enviarlo a Caja para cobrar.
+    
+    **3. 💰 CAJERO (Cobrar):**
+    * En **Caja y Cobro**, el cajero ve todos los pedidos listos (físicos y web).
+    * Cierra el cobro en Efectivo, Tarjeta o "A Cuenta" (Fiado) y le envía el recibo al cliente por WhatsApp.
+    
+    **4. 🛵 REPARTIDOR / LOGÍSTICA:**
+    * En **Entregas a Domicilio**, verán todos los pedidos que tienen dirección asignada.
+    * Una vez que lo entregan, presionan "Marcar como Entregado".
+    
+    **5. 💳 SALDOS Y DEUDAS:**
+    * Los pedidos "A Cuenta" aparecen aquí. El cajero puede enviar recordatorios de pago y registrar cuando el cliente viene a saldar su deuda.
+    """)
+idx += 1
+
+# =======================================================
+# PESTAÑA 2: TOMAR PEDIDO 
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     with tabs[idx]:
@@ -670,6 +728,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 st.divider()
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
+                st.warning("⚠️ **Importante:** Selecciona **todos** los productos que quieras llevar recorriendo la lista, y recién al finalizar presiona el botón de **'Enviar a Caja'**.")
                 
                 # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO A CAJA (VENTA LOCAL) ---
                 if st.button("🚀 ENVIAR A CAJA (Acceso Rápido)", type="primary", use_container_width=True):
@@ -678,7 +737,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     if 'q_loc' in st.session_state:
                         for p, dict_q in st.session_state.q_loc.items():
                             m = MEDIDAS.get(p, "kg")
-                            c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                            c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + dict_q['medio_kg'] * 0.5 + (dict_q['gr'] / 1000.0)
                             if c > 0:
                                 pr_orig = PRECIOS.get(p, 0)
                                 desc_p = DESCUENTOS.get(p, 0)
@@ -720,7 +779,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
 
                 st.markdown("---")
                 if 'q_loc' not in st.session_state:
-                    st.session_state.q_loc = {p: {'kg_un': 0, 'gr': 0.0} for p in productos_ord_loc}
+                    st.session_state.q_loc = {p: {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0} for p in productos_ord_loc}
                 
                 filtro_txt_loc = st.text_input("🔍 Buscar fruta o verdura por nombre...", "", key=f"txt_loc_{st.session_state.v_rk}").lower()
                 st.markdown("---")
@@ -729,7 +788,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     if filtro_txt_loc and filtro_txt_loc not in prod_full.lower(): continue
                     
                     if prod_full not in st.session_state.q_loc: 
-                        st.session_state.q_loc[prod_full] = {'kg_un': 0, 'gr': 0.0}
+                        st.session_state.q_loc[prod_full] = {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0}
                     
                     medida_p = MEDIDAS.get(prod_full, "kg")
                     precio_orig = PRECIOS.get(prod_full, 0)
@@ -738,15 +797,27 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     
                     st.markdown(f"<div style='margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     
-                    c1, c2 = st.columns(2)
-                    with c1:
+                    if medida_p == "un":
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                            "Kg/Unid", min_value=0, step=1, 
+                            "Cantidad (Unidades)", min_value=0, step=1, 
                             key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
                             value=int(st.session_state.q_loc[prod_full]['kg_un'])
                         )
-                    with c2:
-                        if medida_p != "un":
+                    else:
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
+                                "Kilos", min_value=0, step=1, 
+                                key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
+                                value=int(st.session_state.q_loc[prod_full]['kg_un'])
+                            )
+                        with c2:
+                            st.session_state.q_loc[prod_full]['medio_kg'] = st.number_input(
+                                "Medios", min_value=0, step=1, max_value=1,
+                                key=f"loc_m_{prod_full}_{st.session_state.v_rk}", 
+                                value=int(st.session_state.q_loc[prod_full]['medio_kg'])
+                            )
+                        with c3:
                             st.session_state.q_loc[prod_full]['gr'] = st.number_input(
                                 "Gramos", min_value=0.0, step=25.0, 
                                 key=f"loc_g_{prod_full}_{st.session_state.v_rk}", 
@@ -760,7 +831,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 
                 for p, dict_q in st.session_state.q_loc.items():
                     m = MEDIDAS.get(p, "kg")
-                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + dict_q['medio_kg'] * 0.5 + (dict_q['gr'] / 1000.0)
                     if c > 0:
                         pr_orig = PRECIOS.get(p, 0)
                         desc_p = DESCUENTOS.get(p, 0)
@@ -912,7 +983,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     st.session_state.modo_tomar = "🛍️ Venta Local"
                                     st.session_state.v_rk += 1
                                     
-                                    q_dict = {pr: {'kg_un': 0, 'gr': 0.0} for pr in productos_ord_loc}
+                                    q_dict = {pr: {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0} for pr in productos_ord_loc}
                                     rev_nom = {v: k for k, v in NOMBRES.items()}
                                     try:
                                         items_rec = json.loads(p['json']) if p['json'] else p['items']
@@ -923,8 +994,13 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                                 cant = float(it['cantidad'])
                                                 if m == "un": q_dict[pf]['kg_un'] = int(cant)
                                                 else:
-                                                    q_dict[pf]['kg_un'] = int(cant)
-                                                    q_dict[pf]['gr'] = (cant - int(cant)) * 1000
+                                                    k_int = int(cant)
+                                                    rem = cant - k_int
+                                                    q_dict[pf]['kg_un'] = k_int
+                                                    if rem >= 0.5:
+                                                        q_dict[pf]['medio_kg'] = 1
+                                                        rem -= 0.5
+                                                    q_dict[pf]['gr'] = rem * 1000
                                     except: pass
                                     
                                     st.session_state.q_loc = q_dict
@@ -942,7 +1018,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 2: CAJA Y COBRO
+# PESTAÑA 3: CAJA Y COBRO
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1003,7 +1079,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 st.session_state.modo_tomar = "🛍️ Venta Local"
                                 st.session_state.v_rk += 1
                                 
-                                q_dict = {pr: {'kg_un': 0, 'gr': 0.0} for pr in productos_ord_loc}
+                                q_dict = {pr: {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0} for pr in productos_ord_loc}
                                 rev_nom = {v: k for k, v in NOMBRES.items()}
                                 try:
                                     items_rec = json.loads(pl['json']) if pl['json'] else pl['items']
@@ -1014,8 +1090,13 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                             cant = float(it['cantidad'])
                                             if m == "un": q_dict[pf]['kg_un'] = int(cant)
                                             else:
-                                                q_dict[pf]['kg_un'] = int(cant)
-                                                q_dict[pf]['gr'] = (cant - int(cant)) * 1000
+                                                k_int = int(cant)
+                                                rem = cant - k_int
+                                                q_dict[pf]['kg_un'] = k_int
+                                                if rem >= 0.5:
+                                                    q_dict[pf]['medio_kg'] = 1
+                                                    rem -= 0.5
+                                                q_dict[pf]['gr'] = rem * 1000
                                 except: pass
                                 st.session_state.q_loc = q_dict
                                 
@@ -1043,7 +1124,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 3: CUENTAS A COBRAR
+# PESTAÑA 4: CUENTAS A COBRAR
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1440,32 +1521,3 @@ if st.session_state.rol_logueado == "Admin":
                     st.download_button("📥 Descargar Saldos Locales (CSV)", df_l.to_csv(index=False).encode('utf-8'), "saldos_locales.csv", "text/csv")
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
-
-# =======================================================
-# PESTAÑA 9: CÓMO FUNCIONA (MANUAL DE USO)
-# =======================================================
-if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
-    with tabs[idx]:
-        st.write("### 📖 Guía Rápida de la App")
-        st.info("Esta aplicación sincroniza a todo el equipo en tiempo real. ¡Si todos cumplen su rol, el negocio vuela!")
-        st.markdown("""
-        **1. 🛍️ VENDEDOR (Tomar Pedido):**
-        * Busca al cliente, anota las cantidades y presiona **Enviar a Caja**.
-        * **Importante:** Apenas se envía, te aparecerá un botón verde para mandarle un WhatsApp al Cajero. ¡Tócalo siempre para avisar que hay un nuevo pedido esperando!
-        
-        **2. 🌐 PEDIDOS WEB (Clientes):**
-        * Los clientes entran por tu enlace web, eligen sus verduras y envían el pedido. 
-        * En **Estado Pedidos Web**, el cajero puede ver esos pedidos al instante y mandarles un WhatsApp de "Pedido Recibido" al cliente para que se queden tranquilos de que ya se está procesando.
-        * En **Ajustar Pedido Web**, el vendedor toma ese pedido original, pesa la mercadería en la balanza y ajusta los gramos exactos antes de enviarlo a Caja para cobrar.
-        
-        **3. 💰 CAJERO (Cobrar):**
-        * En **Caja y Cobro**, el cajero ve todos los pedidos listos (físicos y web).
-        * Cierra el cobro en Efectivo, Tarjeta o "A Cuenta" (Fiado) y le envía el recibo al cliente por WhatsApp.
-        
-        **4. 🛵 REPARTIDOR / LOGÍSTICA:**
-        * En **Entregas a Domicilio**, verán todos los pedidos que tienen dirección asignada.
-        * Una vez que lo entregan, presionan "Marcar como Entregado".
-        
-        **5. 💳 SALDOS Y DEUDAS:**
-        * Los pedidos "A Cuenta" aparecen aquí. El cajero puede enviar recordatorios de pago y registrar cuando el cliente viene a saldar su deuda.
-        """)
