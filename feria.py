@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y BOTÓN FLOTANTE REAL HTML/JS
+# 1. CONFIGURACIÓN INICIAL Y ESTABILIDAD
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -23,7 +23,7 @@ st.markdown("""
         -webkit-overflow-scrolling: touch;
     }
     
-    [data-testid="stMainBlockContainer"] { padding-bottom: 200px !important; }
+    [data-testid="stMainBlockContainer"] { padding-bottom: 140px !important; }
     
     [data-testid="stSidebar"], [data-testid="collapsedControl"], footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
@@ -310,19 +310,8 @@ if "feria" in query_params:
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
             
-            # --- BOTÓN FLOTANTE REAL HTML (WEB) ---
-            st.markdown("""
-                <div style="position: fixed; bottom: 70px; right: 15px; z-index: 999999;">
-                    <form action="" method="get">
-                        <button type="submit" name="ir_carrito" value="1" style="background-color: #66BB6A; color: white; border: none; padding: 12px 20px; border-radius: 30px; font-weight: bold; font-size: 15px; box-shadow: 0px 4px 12px rgba(0,0,0,0.4); cursor: pointer;">
-                            🛒 VER CARRITO ➡️
-                        </button>
-                    </form>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            if st.query_params.get("ir_carrito") == "1":
-                st.query_params.clear()
+            # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO AL CARRITO ---
+            if st.button("🛒 VER CARRITO Y REVISAR ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
                     m = medidas.get(p, "kg")
@@ -336,6 +325,7 @@ if "feria" in query_params:
                             "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
                             "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
                         })
+                        
                 if not st.session_state.carrito_web:
                     st.warning("⚠️ Debes sumar cantidades a al menos un producto.")
                 else:
@@ -369,7 +359,7 @@ if "feria" in query_params:
                 with c2:
                     if medida_p != "un":
                         st.session_state.q_web[prod_full]['gr'] = st.number_input(
-                            "Gramos", min_value=0.0, step=50.0, 
+                            "Gramos", min_value=0.0, step=25.0, 
                             value=float(st.session_state.q_web[prod_full]['gr']), 
                             key=f"w_g_{prod_full}_{st.session_state.web_rk}"
                         )
@@ -377,6 +367,7 @@ if "feria" in query_params:
 
             st.divider()
             
+            # --- BOTÓN INFERIOR DE ACCESO RÁPIDO AL CARRITO ---
             if st.button("🛒 Revisar Carrito ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
@@ -560,7 +551,7 @@ if st.session_state.usuario_logueado is None:
                             valido = df_usuarios[(df_usuarios[col_usu].str.lower() == usuario_intento.lower()) & (df_usuarios[col_cla] == clave_intento)]
                             if not valido.empty:
                                 st.session_state.usuario_logueado = usuario_intento
-                                rol_bruto = valido.iloc[0].get(col_rol, 'Vendedor') if col_rol else 'Vendedor'
+                                rol_bruto = valido.iloc[0].get(col_rol, 'Vendedor') if rol_bruto else 'Vendedor'
                                 rol_limpio = str(rol_bruto).strip().capitalize()
                                 if rol_limpio not in ["Admin", "Cajero", "Vendedor"]: rol_limpio = "Vendedor"
                                 st.session_state.rol_logueado = rol_limpio
@@ -680,19 +671,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
                 
-                # --- BOTÓN FLOTANTE REAL HTML (VENTA LOCAL) ---
-                st.markdown("""
-                    <div style="position: fixed; bottom: 70px; right: 15px; z-index: 999999;">
-                        <form action="" method="get">
-                            <button type="submit" name="enviar_caja_rapido" value="1" style="background-color: #66BB6A; color: white; border: none; padding: 12px 20px; border-radius: 30px; font-weight: bold; font-size: 15px; box-shadow: 0px 4px 12px rgba(0,0,0,0.4); cursor: pointer;">
-                                🚀 ENVIAR A CAJA ⚡
-                            </button>
-                        </form>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                if st.query_params.get("enviar_caja_rapido") == "1":
-                    st.query_params.clear()
+                # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO A CAJA (VENTA LOCAL) ---
+                if st.button("🚀 ENVIAR A CAJA (Acceso Rápido)", type="primary", use_container_width=True):
                     tot_c_rapido = 0.0
                     carrito_vend_rapido = []
                     if 'q_loc' in st.session_state:
@@ -768,7 +748,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     with c2:
                         if medida_p != "un":
                             st.session_state.q_loc[prod_full]['gr'] = st.number_input(
-                                "Gramos", min_value=0.0, step=50.0, 
+                                "Gramos", min_value=0.0, step=25.0, 
                                 key=f"loc_g_{prod_full}_{st.session_state.v_rk}", 
                                 value=float(st.session_state.q_loc[prod_full]['gr'])
                             )
@@ -861,7 +841,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     with c_k: 
                                         kr = st.number_input("Kilos", value=float(k_in), step=1.0, key=f"w_k_{idx_w}_{idx_item}")
                                     with c_g: 
-                                        gr = st.number_input("Gramos", value=float(g_in), step=50.0, key=f"w_g_{idx_w}_{idx_item}")
+                                        gr = st.number_input("Gramos", value=float(g_in), step=25.0, key=f"w_g_{idx_w}_{idx_item}")
                                     p_real = kr + (gr / 1000.0)
                                 
                                 pr_u = PRECIOS.get(it["producto"], PRECIOS.get(NOMBRES.get(it["producto"], it["producto"]), 100))
