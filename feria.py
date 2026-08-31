@@ -8,13 +8,12 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y BOTONES DE MENÚ AMPLIADOS
+# 1. CONFIGURACIÓN INICIAL Y ESTABILIDAD
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
-    /* BOTONES DE PESTAÑAS (TABS) SUPER GRANDES Y CÓMODOS PARA EL CELULAR */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
         justify-content: center;
@@ -267,7 +266,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, medidas_planas, stock_inicial
 
 # ==========================================
-# 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS)
+# 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS) - PRIORIDAD ABSOLUTA
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -380,19 +379,19 @@ if "feria" in query_params:
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
-                            "Kilos (Entros)", min_value=0, step=1, 
+                            "Kilos", min_value=0, step=1, 
                             value=int(st.session_state.q_web[prod_full]['kg_un']), 
                             key=f"w_k_{prod_full}_{st.session_state.web_rk}"
                         )
                     with c2:
                         st.session_state.q_web[prod_full]['medio_kg'] = st.number_input(
-                            "Medios (0.5kg)", min_value=0, step=1, max_value=1,
+                            "Medios", min_value=0, step=1, max_value=1,
                             value=int(st.session_state.q_web[prod_full]['medio_kg']), 
                             key=f"w_m_{prod_full}_{st.session_state.web_rk}"
                         )
                     with c3:
                         st.session_state.q_web[prod_full]['gr'] = st.number_input(
-                            "Gramos (Afinar)", min_value=0.0, step=25.0, 
+                            "Gramos", min_value=0.0, step=25.0, 
                             value=float(st.session_state.q_web[prod_full]['gr']), 
                             key=f"w_g_{prod_full}_{st.session_state.web_rk}"
                         )
@@ -1124,7 +1123,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 4: CUENTAS A COBRAR
+# PESTAÑA 3: CUENTAS A COBRAR
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1501,7 +1500,7 @@ if st.session_state.rol_logueado == "Admin":
             for cli, d in resumen_saldos.items():
                 saldo = d["Total"] - d["Pagado"]
                 if saldo > 0.01:
-                    row = {"Cliente": cli, "Detalle Deuda": " + ".join(list(d["Tipos"])), "Total Pedido": f"${d['Total']:,.1f}", "Pagado": f"${d['Pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"}
+                    row = {"Cliente": cli, "Detalle Deuda": " + ".join(list(d["Tipσs"])), "Total Pedido": f"${d['Total']:,.1f}", "Pagado": f"${d['Pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"}
                     if d["EsWeb"]: tabla_w.append(row)
                     else: tabla_l.append(row)
             
