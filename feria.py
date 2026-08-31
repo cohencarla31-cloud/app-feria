@@ -8,12 +8,13 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y ESTABILIDAD
+# 1. CONFIGURACIÓN INICIAL Y MENÚ AMPLIADO
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
+    /* PESTAÑAS (TABS) SUPER GRANDES Y CÓMODAS PARA EL CELULAR */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
         justify-content: center;
@@ -57,6 +58,26 @@ st.markdown("""
     button[kind="primary"]:hover {
         background-color: #81C784 !important;
         border-color: #81C784 !important;
+    }
+    
+    @media (max-width: 600px) {
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 8px !important;
+        }
+        div[data-testid="column"] {
+            min-width: 0 !important;
+            padding: 0 !important;
+        }
+        div[data-baseweb="input"] button {
+            width: 25px !important;
+            padding: 0 !important;
+        }
+        label[data-testid="stWidgetLabel"] p {
+            font-size: 13px !important;
+            color: #444 !important;
+        }
     }
     </style>
     
@@ -329,13 +350,14 @@ if "feria" in query_params:
 
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
-            st.warning("⚠️ **Importante:** Selecciona **todos** los productos que quieras llevar recorriendo la lista, y recién al finalizar presiona el botón de **'Revisar Carrito'**.")
+            st.warning("⚠️ **Importante:** Selecciona **todos** los productos que quieras llevar recorriendo la lista, y recién al finalizar presiona el botón de **'Ir a mi carrito'**.")
             
-            if st.button("🛒 VER CARRITO Y REVISAR ➡️", type="primary", use_container_width=True):
+            # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO AL CARRITO ---
+            if st.button("🛒 Ir a mi carrito ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
                     m = medidas.get(p, "kg")
-                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + dict_q['medio_kg'] * 0.5 + (dict_q['gr'] / 1000.0)
+                    c = dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
                     if c > 0:
                         pr_orig = precios.get(p, 0)
                         desc_p = descuentos.get(p, 0)
@@ -360,7 +382,7 @@ if "feria" in query_params:
                 if filtro_txt and filtro_txt not in prod_full.lower(): continue
                 
                 if prod_full not in st.session_state.q_web:
-                    st.session_state.q_web[prod_full] = {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0}
+                    st.session_state.q_web[prod_full] = {'kg_un': 0.0, 'gr': 0.0}
                 
                 medida_p = medidas.get(prod_full, "kg")
                 precio_orig = precios.get(prod_full, 0)
@@ -369,27 +391,22 @@ if "feria" in query_params:
                 
                 st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 
-                if medida_p == "un":
-                    st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
-                        "Cantidad (Unidades)", min_value=0, step=1, 
-                        value=int(st.session_state.q_web[prod_full]['kg_un']), 
-                        key=f"w_k_{prod_full}_{st.session_state.web_rk}"
-                    )
-                else:
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
+                c1, c2 = st.columns(2)
+                with c1:
+                    if medida_p == "un":
                         st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
-                            "Kilos", min_value=0, step=1, 
-                            value=int(st.session_state.q_web[prod_full]['kg_un']), 
+                            "Cantidad (Unidades)", min_value=0.0, step=1.0, 
+                            value=float(st.session_state.q_web[prod_full]['kg_un']), 
                             key=f"w_k_{prod_full}_{st.session_state.web_rk}"
                         )
-                    with c2:
-                        st.session_state.q_web[prod_full]['medio_kg'] = st.number_input(
-                            "Medios", min_value=0, step=1, max_value=1,
-                            value=int(st.session_state.q_web[prod_full]['medio_kg']), 
-                            key=f"w_m_{prod_full}_{st.session_state.web_rk}"
+                    else:
+                        st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
+                            "Kilos", min_value=0.0, step=0.5, 
+                            value=float(st.session_state.q_web[prod_full]['kg_un']), 
+                            key=f"w_k_{prod_full}_{st.session_state.web_rk}"
                         )
-                    with c3:
+                with c2:
+                    if medida_p != "un":
                         st.session_state.q_web[prod_full]['gr'] = st.number_input(
                             "Gramos", min_value=0.0, step=25.0, 
                             value=float(st.session_state.q_web[prod_full]['gr']), 
@@ -399,11 +416,12 @@ if "feria" in query_params:
 
             st.divider()
             
-            if st.button("🛒 Revisar Carrito ➡️", type="primary", use_container_width=True):
+            # --- BOTÓN INFERIOR DE ACCESO RÁPIDO AL CARRITO ---
+            if st.button("🛒 Ir a mi carrito ➡️", type="primary", use_container_width=True):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
                     m = medidas.get(p, "kg")
-                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + dict_q['medio_kg'] * 0.5 + (dict_q['gr'] / 1000.0)
+                    c = dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
                     if c > 0:
                         pr_orig = precios.get(p, 0)
                         desc_p = descuentos.get(p, 0)
@@ -451,7 +469,7 @@ if "feria" in query_params:
                     rem_item = st.session_state.carrito_web.pop(d)
                     pf = rev_nom_web.get(rem_item['producto'], rem_item['producto'])
                     if pf in st.session_state.q_web:
-                        st.session_state.q_web[pf] = {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0}
+                        st.session_state.q_web[pf] = {'kg_un': 0.0, 'gr': 0.0}
                 st.rerun()
                 
             st.markdown("---")
@@ -736,7 +754,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     if 'q_loc' in st.session_state:
                         for p, dict_q in st.session_state.q_loc.items():
                             m = MEDIDAS.get(p, "kg")
-                            c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + dict_q['medio_kg'] * 0.5 + (dict_q['gr'] / 1000.0)
+                            c = dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
                             if c > 0:
                                 pr_orig = PRECIOS.get(p, 0)
                                 desc_p = DESCUENTOS.get(p, 0)
@@ -778,7 +796,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
 
                 st.markdown("---")
                 if 'q_loc' not in st.session_state:
-                    st.session_state.q_loc = {p: {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0} for p in productos_ord_loc}
+                    st.session_state.q_loc = {p: {'kg_un': 0.0, 'gr': 0.0} for p in productos_ord_loc}
                 
                 filtro_txt_loc = st.text_input("🔍 Buscar fruta o verdura por nombre...", "", key=f"txt_loc_{st.session_state.v_rk}").lower()
                 st.markdown("---")
@@ -787,7 +805,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     if filtro_txt_loc and filtro_txt_loc not in prod_full.lower(): continue
                     
                     if prod_full not in st.session_state.q_loc: 
-                        st.session_state.q_loc[prod_full] = {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0}
+                        st.session_state.q_loc[prod_full] = {'kg_un': 0.0, 'gr': 0.0}
                     
                     medida_p = MEDIDAS.get(prod_full, "kg")
                     precio_orig = PRECIOS.get(prod_full, 0)
@@ -796,27 +814,22 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     
                     st.markdown(f"<div style='margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     
-                    if medida_p == "un":
-                        st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                            "Cantidad (Unidades)", min_value=0, step=1, 
-                            key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
-                            value=int(st.session_state.q_loc[prod_full]['kg_un'])
-                        )
-                    else:
-                        c1, c2, c3 = st.columns(3)
-                        with c1:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if medida_p == "un":
                             st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                                "Kilos", min_value=0, step=1, 
+                                "Cantidad (Unidades)", min_value=0.0, step=1.0, 
                                 key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
-                                value=int(st.session_state.q_loc[prod_full]['kg_un'])
+                                value=float(st.session_state.q_loc[prod_full]['kg_un'])
                             )
-                        with c2:
-                            st.session_state.q_loc[prod_full]['medio_kg'] = st.number_input(
-                                "Medios", min_value=0, step=1, max_value=1,
-                                key=f"loc_m_{prod_full}_{st.session_state.v_rk}", 
-                                value=int(st.session_state.q_loc[prod_full]['medio_kg'])
+                        else:
+                            st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
+                                "Kilos", min_value=0.0, step=0.5, 
+                                key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
+                                value=float(st.session_state.q_loc[prod_full]['kg_un'])
                             )
-                        with c3:
+                    with c2:
+                        if medida_p != "un":
                             st.session_state.q_loc[prod_full]['gr'] = st.number_input(
                                 "Gramos", min_value=0.0, step=25.0, 
                                 key=f"loc_g_{prod_full}_{st.session_state.v_rk}", 
@@ -830,7 +843,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 
                 for p, dict_q in st.session_state.q_loc.items():
                     m = MEDIDAS.get(p, "kg")
-                    c = dict_q['kg_un'] if m == "un" else dict_q['kg_un'] + dict_q['medio_kg'] * 0.5 + (dict_q['gr'] / 1000.0)
+                    c = dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
                     if c > 0:
                         pr_orig = PRECIOS.get(p, 0)
                         desc_p = DESCUENTOS.get(p, 0)
@@ -906,10 +919,16 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     with c_k:
                                         p_real = st.number_input(f"Real (un):", value=float(it['cantidad']), step=1.0, key=f"w_un_{idx_w}_{idx_item}")
                                 else:
-                                    k_in = int(it['cantidad'])
-                                    g_in = (it['cantidad'] - k_in) * 1000
+                                    val = float(it['cantidad'])
+                                    k_in = float(int(val))
+                                    rem = val - k_in
+                                    if rem >= 0.5:
+                                        k_in += 0.5
+                                        rem -= 0.5
+                                    g_in = rem * 1000
+                                    
                                     with c_k: 
-                                        kr = st.number_input("Kilos", value=float(k_in), step=1.0, key=f"w_k_{idx_w}_{idx_item}")
+                                        kr = st.number_input("Kilos", value=float(k_in), step=0.5, key=f"w_k_{idx_w}_{idx_item}")
                                     with c_g: 
                                         gr = st.number_input("Gramos", value=float(g_in), step=25.0, key=f"w_g_{idx_w}_{idx_item}")
                                     p_real = kr + (gr / 1000.0)
@@ -982,7 +1001,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     st.session_state.modo_tomar = "🛍️ Venta Local"
                                     st.session_state.v_rk += 1
                                     
-                                    q_dict = {pr: {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0} for pr in productos_ord_loc}
+                                    q_dict = {pr: {'kg_un': 0.0, 'gr': 0.0} for pr in productos_ord_loc}
                                     rev_nom = {v: k for k, v in NOMBRES.items()}
                                     try:
                                         items_rec = json.loads(p['json']) if p['json'] else p['items']
@@ -991,14 +1010,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                             if pf in q_dict:
                                                 m = MEDIDAS.get(pf, "kg")
                                                 cant = float(it['cantidad'])
-                                                if m == "un": q_dict[pf]['kg_un'] = int(cant)
+                                                if m == "un": q_dict[pf]['kg_un'] = float(int(cant))
                                                 else:
-                                                    k_int = int(cant)
+                                                    k_int = float(int(cant))
                                                     rem = cant - k_int
-                                                    q_dict[pf]['kg_un'] = k_int
                                                     if rem >= 0.5:
-                                                        q_dict[pf]['medio_kg'] = 1
+                                                        k_int += 0.5
                                                         rem -= 0.5
+                                                    q_dict[pf]['kg_un'] = k_int
                                                     q_dict[pf]['gr'] = rem * 1000
                                     except: pass
                                     
@@ -1078,7 +1097,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 st.session_state.modo_tomar = "🛍️ Venta Local"
                                 st.session_state.v_rk += 1
                                 
-                                q_dict = {pr: {'kg_un': 0, 'medio_kg': 0, 'gr': 0.0} for pr in productos_ord_loc}
+                                q_dict = {pr: {'kg_un': 0.0, 'gr': 0.0} for pr in productos_ord_loc}
                                 rev_nom = {v: k for k, v in NOMBRES.items()}
                                 try:
                                     items_rec = json.loads(pl['json']) if pl['json'] else pl['items']
@@ -1087,14 +1106,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                         if pf in q_dict:
                                             m = MEDIDAS.get(pf, "kg")
                                             cant = float(it['cantidad'])
-                                            if m == "un": q_dict[pf]['kg_un'] = int(cant)
+                                            if m == "un": q_dict[pf]['kg_un'] = float(int(cant))
                                             else:
-                                                k_int = int(cant)
+                                                k_int = float(int(cant))
                                                 rem = cant - k_int
-                                                q_dict[pf]['kg_un'] = k_int
                                                 if rem >= 0.5:
-                                                    q_dict[pf]['medio_kg'] = 1
+                                                    k_int += 0.5
                                                     rem -= 0.5
+                                                q_dict[pf]['kg_un'] = k_int
                                                 q_dict[pf]['gr'] = rem * 1000
                                 except: pass
                                 st.session_state.q_loc = q_dict
@@ -1123,7 +1142,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 3: CUENTAS A COBRAR
+# PESTAÑA 4: CUENTAS A COBRAR
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1191,42 +1210,44 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         msg_rec = f"👋 Hola {cliente_elegido}, desde *{nombre_empresa}* te recordamos que tu saldo pendiente de pago es de *${saldo_actual:,.1f}*. ¡Muchas gracias!"
                         st.link_button("📲 Enviar Recordatorio de Deuda (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_rec)}", use_container_width=True)
                         
-                        pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(saldo_actual), step=100.0, key=f"pago_parc_{cliente_elegido}")
-                        
-                        if st.button("💵 Registrar Pago / Saldar Cuenta", type="primary", key=f"btn_reg_pago_{cliente_elegido}"):
-                            if pago_parcial > 0:
-                                nuevo_saldo = saldo_actual - pago_parcial
-                                gc = conectar_google()
-                                ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
-                                
-                                if nuevo_saldo <= 0.01:
-                                    msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
-                                    upds = []
-                                    for pd_fiado in info_c["pedidos"]:
-                                        if "abono" not in pd_fiado['estado'].lower() and "abono" not in pd_fiado['detalle'].lower():
-                                            col_e = chr(65 + pd_fiado['idx_est'])
-                                            new_est_f = "Web - Cobrado" if "Web" in pd_fiado['estado'] else "Cobrado"
-                                            for fi in pd_fiado['filas']:
-                                                upds.append({'range': f'{col_e}{fi}', 'values': [[new_est_f]]})
-                                    if upds: ws.batch_update(upds)
+                        with st.form(key=f"form_pago_{cliente_elegido}"):
+                            pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(saldo_actual), step=100.0, key=f"pago_parc_{cliente_elegido}")
+                            submit_pago = st.form_submit_button("💵 Registrar Pago / Saldar Cuenta", type="primary")
+                            
+                            if submit_pago:
+                                if pago_parcial > 0:
+                                    nuevo_saldo = saldo_actual - pago_parcial
+                                    gc = conectar_google()
+                                    ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                                    
+                                    if nuevo_saldo <= 0.01:
+                                        msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
+                                        upds = []
+                                        for pd_fiado in info_c["pedidos"]:
+                                            if "abono" not in pd_fiado['estado'].lower() and "abono" not in pd_fiado['detalle'].lower():
+                                                col_e = chr(65 + pd_fiado['idx_est'])
+                                                new_est_f = "Web - Cobrado" if "Web" in pd_fiado['estado'] else "Cobrado"
+                                                for fi in pd_fiado['filas']:
+                                                    upds.append({'range': f'{col_e}{fi}', 'values': [[new_est_f]]})
+                                        if upds: ws.batch_update(upds)
+                                    else:
+                                        msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente de ${nuevo_saldo:,.1f}."
+                                        ahora = datetime.now(TZ_UY)
+                                        ws.append_row([
+                                            ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
+                                            st.session_state.usuario_logueado, cliente_elegido, 
+                                            "Abono a Cuenta", 1, -pago_parcial, info_c['celular'], 
+                                            "Efectivo", "Cuenta Corriente", "", 0, "[]"
+                                        ])
+                                    
+                                    limpiar_cache_ventas()
+                                    time.sleep(1.5)
+                                    
+                                    st.session_state.msg_cobro = "✅ ¡Pago registrado con éxito!"
+                                    st.session_state.link_cobro = f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}"
+                                    st.rerun()
                                 else:
-                                    msg_wsp = f"👋 Hola {cliente_elegido}, registramos tu pago de ${pago_parcial:,.1f}. ⚠️ Te queda un saldo pendiente de ${nuevo_saldo:,.1f}."
-                                    ahora = datetime.now(TZ_UY)
-                                    ws.append_row([
-                                        ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), 
-                                        st.session_state.usuario_logueado, cliente_elegido, 
-                                        "Abono a Cuenta", 1, -pago_parcial, info_c['celular'], 
-                                        "Efectivo", "Cuenta Corriente", "", 0, "[]"
-                                    ])
-                                
-                                limpiar_cache_ventas()
-                                time.sleep(1.5)
-                                
-                                st.session_state.msg_cobro = "✅ ¡Pago registrado con éxito!"
-                                st.session_state.link_cobro = f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}"
-                                st.rerun()
-                            else:
-                                st.warning("⚠️ Ingresa un monto mayor a 0 para registrar el pago.")
+                                    st.warning("⚠️ Ingresa un monto mayor a 0 para registrar el pago.")
             
             if st.session_state.get('msg_cobro'):
                 st.success(st.session_state.msg_cobro)
@@ -1240,7 +1261,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 4: ESTADO DE LOS PEDIDOS WEB
+# PESTAÑA 5: ESTADO DE LOS PEDIDOS WEB
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1262,7 +1283,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 5: ENTREGAS A DOMICILIO
+# PESTAÑA 6: ENTREGAS A DOMICILIO
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1339,7 +1360,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 6: PANEL ADMIN
+# PESTAÑA 7: PANEL ADMIN
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
@@ -1377,7 +1398,7 @@ if st.session_state.rol_logueado == "Admin":
     idx += 1
 
 # =======================================================
-# PESTAÑA 7: REPORTES PRO (CON MÓDULO DE STOCK ORDENADO)
+# PESTAÑA 8: REPORTES PRO (CON MÓDULO DE STOCK ORDENADO)
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
@@ -1463,7 +1484,7 @@ if st.session_state.rol_logueado == "Admin":
     idx += 1
 
 # =======================================================
-# PESTAÑA 8: REPORTES PRO (SALDOS PENDIENTES)
+# PESTAÑA 9: REPORTES PRO (SALDOS PENDIENTES)
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
@@ -1500,7 +1521,7 @@ if st.session_state.rol_logueado == "Admin":
             for cli, d in resumen_saldos.items():
                 saldo = d["Total"] - d["Pagado"]
                 if saldo > 0.01:
-                    row = {"Cliente": cli, "Detalle Deuda": " + ".join(list(d["Tipσs"])), "Total Pedido": f"${d['Total']:,.1f}", "Pagado": f"${d['Pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"}
+                    row = {"Cliente": cli, "Detalle Deuda": " + ".join(list(d["Tipos"])), "Total Pedido": f"${d['Total']:,.1f}", "Pagado": f"${d['Pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"}
                     if d["EsWeb"]: tabla_w.append(row)
                     else: tabla_l.append(row)
             
