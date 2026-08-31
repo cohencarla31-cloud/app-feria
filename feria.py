@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS LIMPIO
+# 1. CONFIGURACIÓN INICIAL Y ESTILOS
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -61,6 +61,27 @@ st.markdown("""
     button[kind="primary"]:hover {
         background-color: #81C784 !important;
         border-color: #81C784 !important;
+    }
+    
+    @media (max-width: 600px) {
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 8px !important;
+        }
+        div[data-testid="column"] {
+            min-width: 0 !important;
+            padding: 0 !important;
+        }
+        div[data-baseweb="input"] button {
+            width: 25px !important;
+            padding: 0 !important;
+        }
+        label[data-testid="stWidgetLabel"] p {
+            font-size: 12px !important;
+            color: #444 !important;
+            white-space: nowrap;
+        }
     }
     </style>
     
@@ -140,7 +161,7 @@ def limpiar_y_formatear_celular(celular_ingresado):
     return num
 
 def get_estado_col_index(row):
-    kw = ["caja", "web", "entregado", "cancelado", "cobrado", "fiado", "pendiente", "cuenta", "abono"]
+    kw = ["caja", "web", "entregado", "cancelado", "cobrado", "fiado", "pendiente", "cuenta", "abono", "confirmado"]
     if len(row) > 10 and any(k in str(row[10]).lower() for k in kw): return 10
     if len(row) > 9 and any(k in str(row[9]).lower() for k in kw): return 9
     return 9
@@ -270,7 +291,7 @@ def cargar_datos_feria(link):
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, medidas_planas, stock_inicial
 
 # ==========================================
-# 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS) - PRIORIDAD ABSOLUTA
+# 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS)
 # ==========================================
 query_params = st.query_params
 if "feria" in query_params:
@@ -298,7 +319,7 @@ if "feria" in query_params:
         with st.expander("ℹ️ Pasos para tu Pedido Online", expanded=(st.session_state.web_step == 1)):
             st.markdown("""
             1️⃣ **Datos:** Completa tu nombre, celular y dirección.
-            2️⃣ **Productos:** Elige **TODO** lo que vas a llevar y luego avanza.
+            2️⃣ **Productos:** Elige **TODO** lo que vas a llevar y luego avanza al carrito.
             3️⃣ **Revisión:** Verifica el total de tu compra.
             4️⃣ **Confirmar:** Envía el WhatsApp para asegurar el pedido.
             """)
@@ -333,9 +354,10 @@ if "feria" in query_params:
 
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
-            st.warning("⚠️ **Importante:** Selecciona **todos** los productos de la lista, y recién al finalizar presiona el botón de **'Ir a mi carrito'**.")
+            # INSTRUCCIÓN CLARA:
+            st.warning("⚠️ **Importante:** Selecciona **todos** los productos que quieras llevar recorriendo la lista, y al finalizar presiona el botón **'Ir a mi carrito'** que se encuentra al principio o al final del listado de productos.")
             
-            # --- BOTÓN ANCHO DE IR AL CARRITO (ARRIBA) ---
+            # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO AL CARRITO ---
             if st.button("🛒 Ir a mi carrito ➡️", type="primary", use_container_width=True, key="btn_cart_top_web"):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
@@ -372,10 +394,8 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                # Nombre del producto y precio
                 st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 
-                # CASILLAS UNA ABAJO DE LA OTRA (SIN COLUMNAS) Y TEXTOS SUPER EXPLICATIVOS
                 if medida_p == "un":
                     st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
                         "Cantidad (Unidades)", min_value=0.0, step=1.0, 
@@ -393,12 +413,11 @@ if "feria" in query_params:
                         value=float(st.session_state.q_web[prod_full]['gr']), 
                         key=f"w_g_{prod_full}_{st.session_state.web_rk}"
                     )
-                
-                st.markdown("<hr style='margin: 12px 0 16px 0; border: 1px solid #eee;'>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
             st.divider()
             
-            # --- BOTÓN ANCHO DE IR AL CARRITO (ABAJO) ---
+            # --- BOTÓN INFERIOR DE ACCESO RÁPIDO AL CARRITO ---
             if st.button("🛒 Ir a mi carrito ➡️", type="primary", use_container_width=True, key="btn_cart_bottom_web"):
                 st.session_state.carrito_web = []
                 for p, dict_q in st.session_state.q_web.items():
@@ -621,9 +640,9 @@ tabs_nombres = ["📖 Guía de Uso"]
 if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]: 
     tabs_nombres.append("📝 Tomar Pedido")
 if st.session_state.rol_logueado in ["Admin", "Cajero"]: 
+    tabs_nombres.append("🌐 Estado Pedidos Web") # MOVIDO AQUÍ
     tabs_nombres.append("💰 Caja y Cobro")
     tabs_nombres.append("💳 Cuentas A Cobrar")
-    tabs_nombres.append("🌐 Estado Pedidos Web")
     tabs_nombres.append("🛵 Entregas a Domicilio")
 if st.session_state.rol_logueado == "Admin": 
     tabs_nombres.append("📊 Panel Admin")
@@ -682,7 +701,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
         
         else:
             if st.session_state.cliente_retomado_aviso:
-                st.warning(f"⚠️ **PROCESANDO AL CLIENTE:** `{st.session_state.cliente_retomado_aviso}`.")
+                # AVISO GIGANTE DE RETOME DESDE CAJA CON FECHA Y HORA
+                st.error(f"⚠️ **ATENCIÓN:** `{st.session_state.cliente_retomado_aviso}`")
                 if st.button("❌ Quitar aviso", key="btn_rm_aviso"):
                     st.session_state.cliente_retomado_aviso = ""
                     st.rerun()
@@ -727,7 +747,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 st.divider()
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
-                st.warning("⚠️ **Importante:** Selecciona **todos** los productos de la lista, y recién al finalizar presiona el botón de **'Enviar a Caja'**.")
+                # INSTRUCCIÓN CLARA:
+                st.warning("⚠️ **Importante:** Selecciona **todos** los productos que quieras llevar recorriendo la lista, y al finalizar presiona el botón **'Enviar a Caja'** que se encuentra al principio o al final del listado de productos.")
                 
                 # --- BOTÓN SUPERIOR DE ACCESO RÁPIDO A CAJA ---
                 if st.button("🚀 ENVIAR A CAJA (Acceso Rápido)", type="primary", use_container_width=True, key="btn_caja_top_loc"):
@@ -796,7 +817,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     
                     st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#66BB6A; font-size: 14px; margin-left: 5px;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     
-                    # CASILLAS APILADAS UNA ABAJO DE LA OTRA (Sin columnas)
+                    # CASILLAS APILADAS UNA ABAJO DE LA OTRA
                     if medida_p == "un":
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
                             "Cantidad (Unidades)", min_value=0.0, step=1.0, 
@@ -871,9 +892,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
             elif st.session_state.modo_tomar == "🌐 Ajustar Pedido Web":
                 st.write("### 📦 Armar Pedido Web (Comparativa: Pedido Original vs Peso Real)")
                 try:
-                    pedidos_web = agrupar_pedidos(ventas_data_global, ["Web - Pendiente"])
+                    # AHORA FILTRA POR WEB - CONFIRMADO (Ya pasó por la pantalla de recepción)
+                    pedidos_web = agrupar_pedidos(ventas_data_global, ["Web - Confirmado"])
                     if not pedidos_web:
-                        st.info("No hay pedidos web pendientes para armar.")
+                        st.info("No hay pedidos web confirmados listos para armar.")
                     else:
                         opciones_w = ["Seleccionar..."] + [f"{p['fecha']} | {p['cliente']} (ID {p['filas'][0]})" for p in pedidos_web]
                         sel_w = st.selectbox("Seleccionar pedido web a preparar:", opciones_w, key="sel_w_ajuste")
@@ -1011,7 +1033,50 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 3: CAJA Y COBRO
+# PESTAÑA 3: ESTADO DE LOS PEDIDOS WEB (UBICACIÓN NUEVA Y FLUJO CORREGIDO)
+# =======================================================
+if st.session_state.rol_logueado in ["Admin", "Cajero"]:
+    with tabs[idx]:
+        st.write("### 🌐 Estado de los Pedidos Web (Recién Llegados)")
+        
+        col_refw1, col_refw2 = st.columns([1, 3])
+        with col_refw1:
+            if st.button("🔄 Refrescar", key="btn_ref_est_web"):
+                limpiar_cache_ventas()
+                st.rerun()
+                
+        try:
+            # Solo muestra los "Web - Pendiente" (nuevos)
+            p_web = agrupar_pedidos(ventas_data_global, ["Web - Pendiente"])
+            if not p_web: st.info("No hay pedidos web nuevos sin confirmar.")
+            else:
+                for pw in p_web:
+                    with st.container():
+                        st.markdown(f"#### 🟡 {pw['cliente']}")
+                        st.write(f"📅 **Fecha:** {pw['fecha']} {pw['hora']} | 📍 **Dirección:** {pw['direccion']}")
+                        st.write(f"💰 **Total Estimado:** ${pw['total']:,.1f}")
+                        
+                        col_c1, col_c2 = st.columns(2)
+                        with col_c1:
+                            if st.button("✅ Confirmar Recepción (Enviar a Preparar)", key=f"conf_w_{pw['filas'][0]}", type="primary", use_container_width=True):
+                                gc = conectar_google()
+                                ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                                col_e = chr(65 + pw['idx_est'])
+                                # Al tocar esto, cambia de Pendiente a Confirmado y recién ahí lo ve el Vendedor
+                                ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Web - Confirmado"]]} for f in pw['filas']])
+                                limpiar_cache_ventas()
+                                time.sleep(1)
+                                st.success("✅ Pedido enviado a 'Ajustar Pedido Web'.")
+                                st.rerun()
+                        with col_c2:
+                            msg_ack = f"👋 Hola {pw['cliente']}, recibimos tu pedido en *{nombre_empresa}* y ya se lo pasamos al equipo para que comience a prepararlo. ¡Muchas gracias por elegirnos! 💚"
+                            st.link_button("📲 Enviar WhatsApp (Opcional)", f"https://wa.me/{limpiar_y_formatear_celular(pw['celular'])}?text={urllib.parse.quote(msg_ack)}", use_container_width=True)
+                        st.divider()
+        except Exception as e: st.error(f"Error: {e}")
+    idx += 1
+
+# =======================================================
+# PESTAÑA 4: CAJA Y COBRO
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1066,9 +1131,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 limpiar_cache_ventas()
                                 time.sleep(1)
                                 
+                                # SETEA EL CARTEL LUMINOSO DE QUE SE RETOMÓ UN PEDIDO DE LA CAJA
+                                st.session_state.cliente_retomado_aviso = f"PEDIDO RETOMADO DE CAJA DE {pl['cliente'].upper()} EL DÍA {datetime.now(TZ_UY).strftime('%d/%m/%Y')} A LAS {datetime.now(TZ_UY).strftime('%H:%M:%S')}."
                                 st.session_state.cli_nombre = pl['cliente']
                                 st.session_state.cli_celular = pl['celular']
-                                st.session_state.cliente_retomado_aviso = pl['cliente']
                                 st.session_state.modo_tomar = "🛍️ Venta Local"
                                 st.session_state.v_rk += 1
                                 
@@ -1093,7 +1159,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 except: pass
                                 st.session_state.q_loc = q_dict
                                 
-                                st.success("✅ Pedido devuelto a 'Tomar Pedido'.")
+                                st.success("✅ Pedido devuelto. Ve a la pestaña 'Tomar Pedido' para editarlo.")
                                 st.rerun()
             except Exception as e: st.error(f"Error: {e}")
 
@@ -1117,7 +1183,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 4: CUENTAS A COBRAR
+# PESTAÑA 5: CUENTAS A COBRAR
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1185,6 +1251,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         msg_rec = f"👋 Hola {cliente_elegido}, desde *{nombre_empresa}* te recordamos que tu saldo pendiente de pago es de *${saldo_actual:,.1f}*. ¡Muchas gracias!"
                         st.link_button("📲 Enviar Recordatorio de Deuda (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_rec)}", use_container_width=True)
                         
+                        # CORRECCIÓN DE BUG DEL PAGO PARCIAL: Inputs limpios sin Form
                         pago_parcial = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(saldo_actual), step=100.0, key=f"pago_parc_{cliente_elegido}")
                         
                         if st.button("💵 Registrar Pago / Saldar Cuenta", type="primary", key=f"btn_reg_pago_{cliente_elegido}"):
@@ -1220,7 +1287,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 st.session_state.link_cobro = f"https://wa.me/{limpiar_y_formatear_celular(info_c['celular'])}?text={urllib.parse.quote(msg_wsp)}"
                                 st.rerun()
                             else:
-                                st.warning("⚠️ Ingresa un monto mayor a 0 para registrar el pago.")
+                                st.warning("⚠️ Debes escribir o subir el monto en la casilla de arriba para registrar un pago.")
             
             if st.session_state.get('msg_cobro'):
                 st.success(st.session_state.msg_cobro)
@@ -1230,28 +1297,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     st.session_state.link_cobro = ""
                     st.rerun()
 
-        except Exception as e: st.error(f"Error: {e}")
-    idx += 1
-
-# =======================================================
-# PESTAÑA 5: ESTADO DE LOS PEDIDOS WEB
-# =======================================================
-if st.session_state.rol_logueado in ["Admin", "Cajero"]:
-    with tabs[idx]:
-        st.write("### 🌐 Estado de los Pedidos Web (Pendientes)")
-        try:
-            p_web = agrupar_pedidos(ventas_data_global, ["Web - Pendiente"])
-            if not p_web: st.info("No hay pedidos web pendientes de armado.")
-            else:
-                for pw in p_web:
-                    with st.container():
-                        st.markdown(f"#### 🟡 {pw['cliente']}")
-                        st.write(f"📅 **Fecha:** {pw['fecha']} {pw['hora']} | 📍 **Dirección:** {pw['direccion']}")
-                        st.write(f"💰 **Total Estimado:** ${pw['total']:,.1f}")
-                        
-                        msg_ack = f"👋 Hola {pw['cliente']}, tu pedido de *{nombre_empresa}* ya está listo y pesado. El total de tu cuenta es *${pw['total']:,.1f}*. ¡Muchas gracias por elegirnos! 💚"
-                        st.link_button("📲 Confirmar Recepción al Cliente (WhatsApp)", f"https://wa.me/{limpiar_y_formatear_celular(pw['celular'])}?text={urllib.parse.quote(msg_ack)}", type="primary", use_container_width=True)
-                        st.divider()
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
@@ -1271,13 +1316,21 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         try:
             todas = agrupar_pedidos(ventas_data_global)
             
-            ent_pendientes = [e for e in todas if "entregado" not in e['estado'].lower() and "cancelado" not in e['estado'].lower() and e["direccion"].strip() != ""]
+            # FILTRO CORREGIDO: Evita que aparezcan pedidos sin preparar ("Web - Pendiente" o "Web - Confirmado")
+            ent_pendientes = [
+                e for e in todas 
+                if "entregado" not in e['estado'].lower() 
+                and "cancelado" not in e['estado'].lower() 
+                and "pendiente" not in e['estado'].lower() # Evita "Web - Pendiente"
+                and "confirmado" not in e['estado'].lower() # Evita "Web - Confirmado"
+                and e["direccion"].strip() != ""
+            ]
             
             hoy_str = datetime.now(TZ_UY).strftime("%d/%m/%Y")
             ent_hoy = [e for e in todas if "entregado" in e['estado'].lower() and e["direccion"].strip() != "" and e['fecha'] == hoy_str]
 
             st.write("#### 🚚 Pendientes de Llevar")
-            if not ent_pendientes: st.info("No hay entregas pendientes por llevar.")
+            if not ent_pendientes: st.info("No hay entregas pendientes por llevar (Los pedidos web aparecerán aquí una vez que hayan sido armados y enviados a Caja).")
             else:
                 tabla_ent = []
                 for ent in ent_pendientes:
@@ -1383,7 +1436,11 @@ if st.session_state.rol_logueado == "Admin":
             for p in ordenes_admin:
                 est = p['estado'].lower()
                 if "cancelado" not in est and "caja" not in est and "pendiente" not in est and "abono" not in est:
+                    # CORRECCIÓN REPORTE A DEFINIR: Limpia los "Pendiente Pago" web que pasan a deuda
                     pago_bruto = str(p['pago']).strip().title() if p['pago'] else "No especificado"
+                    if pago_bruto in ["Pendiente Pago", "Envío Cuenta", "Envio Cuenta"]: 
+                        pago_bruto = "A Cuenta / Fiado"
+                    
                     origen = " (Web)" if "web" in est else " (Local)"
                     concepto = pago_bruto + origen
                     pagos_resumen[concepto] = pagos_resumen.get(concepto, 0.0) + p['total']
