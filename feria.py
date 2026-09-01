@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS (CÓDIGO ANTI-ROTURAS)
+# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTO CONTRASTE
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -166,7 +166,6 @@ def agrupar_pedidos(data, filtro_estados=None):
         try:
             parsed_json = json.loads(v["json"])
             if parsed_json and isinstance(parsed_json, list):
-                # FIX: Asignamos el json parseado a los items para que tengan la etiqueta (kg/un) correcta en el WSP.
                 v["items"] = parsed_json
             else:
                 v["json"] = json.dumps([{"producto": it.get("producto", ""), "cantidad": it.get("cantidad", 0), "cantidad_txt": f"{it.get('cantidad', 0)}", "subtotal": it.get("subtotal", 0.0), "ahorro": it.get("ahorro", 0.0), "tipo": it.get("tipo", "Propio")} for it in v["items"]])
@@ -272,6 +271,7 @@ if "feria" in query_params:
         nombre_feria = config.get("nombre_empresa", config.get("nombre", "Nuestra Feria"))
         celular_feriante = config.get("celular_feriante", config.get("celular_contacto", "59893343092"))
         bienvenida_dia = config.get("bienvenida", config.get("ofertas", config.get("banner", "")))
+        cuenta_bancaria = config.get("cuenta_bancaria", config.get("cuenta", "No especificada en configuración"))
         
         productos_ord_web = sorted(productos, key=lambda x: nombres_planos.get(x, x).strip().lower())
         
@@ -303,7 +303,7 @@ if "feria" in query_params:
                     st.session_state.carrito_web.append({
                         "producto": nombres_planos.get(p, p),
                         "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
-                        "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
+                        "subtotal": float(c * pr_fin), "ahorro": float(c * (pr_orig - pr_fin))
                     })
             if not st.session_state.carrito_web:
                 st.warning("⚠️ Debes sumar cantidades a al menos un producto.")
@@ -355,13 +355,13 @@ if "feria" in query_params:
                 medida_p = medidas.get(prod_full, "kg")
                 precio_orig = precios.get(prod_full, 0)
                 desc_p = descuentos.get(prod_full, 0)
-                p_final = precio_orig * (1 - desc_p/100)
+                pr_fin = precio_orig * (1 - desc_p/100)
                 
                 desc_tag = f" <span style='color: white; background-color: #d32f2f; padding: 2px 6px; border-radius: 4px; font-size: 12px;'>🎁 -{desc_p}%</span>" if desc_p > 0 else ""
                 
                 col_inf, col_bot = st.columns([0.65, 0.35])
                 with col_inf:
-                    st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b>{desc_tag}<br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b>{desc_tag}<br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${pr_fin:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 with col_bot:
                     if st.button("🛒 Carrito", key=f"bot_{prod_full}_{st.session_state.web_rk}", type="primary", use_container_width=True):
                         procesar_carrito_web()
@@ -410,6 +410,7 @@ if "feria" in query_params:
                     if st.button("❌", key=f"del_w3_{idx_cw}"):
                         idx_to_del.append(idx_cw)
                 with col_txt: 
+                    # El subtotal ya trae el descuento aplicado por la formula c * pr_fin
                     st.markdown(f"<div style='padding-top: 6px;'><b>{itw['producto']}</b> ({itw['cantidad_txt']}) &nbsp; <span style='color:#2e7b32; font-weight: bold;'>${itw['subtotal']:,.1f}</span></div>", unsafe_allow_html=True)
                 
                 tot_web += itw['subtotal']
@@ -425,12 +426,12 @@ if "feria" in query_params:
                 st.rerun()
                 
             st.markdown("---")
-            tot_ahor_w = sum(itw['ahorro'] for itw in st.session_state.carrito_web)
             st.markdown(f"### Total Estimado: **${tot_web:,.1f}**")
             
-            # SOLUCION WEB: AHORRO EXPLÍCITO MOSTRADO AL CLIENTE
-            if tot_ahor_w > 0: 
-                st.success(f"🎉 ¡Ahorraste **${tot_ahor_w:,.1f}** con nuestros descuentos!")
+            # MOSTRAR AHORRO EXPLÍCITO
+            tot_ahor_w = sum(itw['ahorro'] for itw in st.session_state.carrito_web)
+            if tot_ahor_w > 0:
+                st.success(f"🎉 ¡Te ahorraste **${tot_ahor_w:,.1f}** con nuestros descuentos en este pedido!")
                 
             st.warning("⚖️ El importe es estimado según el peso exacto en la balanza.")
             st.divider()
@@ -493,7 +494,6 @@ if "feria" in query_params:
             
             tot_web = sum(i['subtotal'] for i in st.session_state.carrito_web)
             
-            # WhatsApp Detalle Exacto Cliente->Vendedor
             detalle_wsp_list = []
             for i in st.session_state.carrito_web:
                 detalle_wsp_list.append(f"• {i['producto']} ({i['cantidad_txt']})")
@@ -582,6 +582,7 @@ ventas_data_global = obtener_ventas(st.session_state.link_feria)
 PRODUCTOS, PRECIOS, DESCUENTOS, MEDIDAS, NOMBRES, CLIENTES_DICT, CONFIG, MEDIDAS_PLANAS, STOCK_INICIAL = cargar_datos_feria(st.session_state.link_feria)
 nombre_empresa = CONFIG.get("nombre_empresa", CONFIG.get("nombre", "La Feria"))
 celular_feriante_local = CONFIG.get("celular_feriante", CONFIG.get("celular_contacto", "59893343092"))
+cuenta_bancaria_config = CONFIG.get("cuenta_bancaria", CONFIG.get("cuenta", "No especificada en configuración"))
 
 productos_ord_loc = sorted(PRODUCTOS, key=lambda x: NOMBRES.get(x, x).strip().lower())
 
@@ -638,13 +639,15 @@ with tabs[idx]:
     )
     
     st.markdown("---")
-    st.markdown("**📋 Explicación detallada de cada módulo:**")
-    st.markdown("* **📝 Tomar Pedido (Ventas Locales):** PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) y luego aprieta el botón de bajar al Resumen para enviar a Caja (o el botón ⬇️ de ver resumen al lado de cada producto). Si la caja devuelve un pedido para editar, aparecerá en **Retomar Pendientes** con su respectivo aviso.")
-    st.markdown("* **🌐 Estado Pedidos Web:** Recibe automáticamente las compras hechas por los clientes desde la web. Primero envías el WhatsApp de confirmación y luego haces clic en **'Enviar a Preparar'**.")
-    st.markdown("* **⚖️ Ajustar Pedido Web:** Aquí llegan los pedidos web confirmados. El vendedor los pesa con exactitud en la balanza antes de enviarlos a la caja.")
-    st.markdown("* **💰 Caja y Cobro:** El cajero procesa los pagos en efectivo, tarjeta o cuenta corriente. Si hay un error, puede devolver el pedido al vendedor con el botón **'Retomar para Editar'**.")
-    st.markdown("* **💳 Cuentas a Cobrar:** Administra los saldos pendientes divididos en dos solapas: deudas Web y fiados Locales. Muestra la **fecha exacta** del pedido y permite registrar pagos parciales o totales.")
-    st.markdown("* **🛵 Entregas a Domicilio:** Gestiona la logística. Muestra los pedidos armados con su fecha y dirección. El botón de WhatsApp **'Va en Camino'** está arriba y **'Marcar como Entregado'** debajo.")
+    st.markdown(
+        "**📋 Explicación detallada de cada módulo:**\n\n"
+        "* **📝 Tomar Pedido (Ventas Locales):** PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) y luego aprieta el botón de bajar al Resumen para enviar a Caja (o el botón ⬇️ de ver resumen al lado de cada producto). Si la caja devuelve un pedido para editar, aparecerá en **Retomar Pendientes** con su respectivo aviso.\n\n"
+        "* **🌐 Estado Pedidos Web:** Recibe automáticamente las compras hechas por los clientes desde la web. Primero envías el WhatsApp de confirmación y luego haces clic en **'Enviar a Preparar'**.\n\n"
+        "* **⚖️ Ajustar Pedido Web:** Aquí llegan los pedidos web confirmados. El vendedor los pesa con exactitud en la balanza antes de enviarlos a la caja.\n\n"
+        "* **💰 Caja y Cobro:** El cajero procesa los pagos en efectivo, tarjeta, transferencia o cuenta corriente. Si hay un error, puede devolver el pedido al vendedor con el botón **'Retomar para Editar'**.\n\n"
+        "* **💳 Cuentas a Cobrar:** Administra los saldos pendientes divididos en dos solapas: deudas Web y fiados Locales. Muestra la **fecha exacta** del pedido y permite registrar pagos parciales o totales especificando el método de pago.\n\n"
+        "* **🛵 Entregas a Domicilio:** Gestiona la logística. Muestra los pedidos armados con su fecha y dirección. El botón de WhatsApp **'Va en Camino'** está arriba y **'Marcar como Entregado'** debajo."
+    )
 idx += 1
 
 # =======================================================
@@ -676,7 +679,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     st.session_state.cliente_retomado_aviso = ""
                     st.rerun()
 
-            # MANEJO CORRECTO DEL RADIO BUTTON PARA EVITAR ERRORES DE PANTALLA
             modos_disponibles = ["🛍️ Venta Local", "🌐 Ajustar Pedido Web", "🔄 Retomar Pendientes"]
             modo_idx = modos_disponibles.index(st.session_state.modo_tomar) if st.session_state.modo_tomar in modos_disponibles else 0
             
@@ -742,14 +744,13 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     medida_p = MEDIDAS.get(prod_full, "kg")
                     precio_orig = PRECIOS.get(prod_full, 0)
                     desc_p = DESCUENTOS.get(prod_full, 0)
-                    p_final = precio_orig * (1 - desc_p/100)
+                    pr_fin = precio_orig * (1 - desc_p/100)
                     
-                    # VISUALIZACIÓN DE DESCUENTO EN VENTA LOCAL
                     desc_tag = f" <span style='color: white; background-color: #d32f2f; padding: 2px 6px; border-radius: 4px; font-size: 12px;'>🎁 -{desc_p}%</span>" if desc_p > 0 else ""
                     
                     col_pinfo, col_pbtn = st.columns([0.65, 0.35])
                     with col_pinfo:
-                        st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b>{desc_tag}<br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b>{desc_tag}<br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${pr_fin:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     with col_pbtn:
                         st.markdown(f"<a href='#resumen_local' style='display: block; text-align: center; background-color: #f0f2f6; color: #111; padding: 8px 2px; border-radius: 8px; font-weight: 800; font-size: 14px; text-decoration: none; border: 2px solid #111;'>⬇️ Ver resumen</a>", unsafe_allow_html=True)
                     
@@ -788,10 +789,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                         carrito_vend.append({
                             "producto": NOMBRES.get(p, p),
                             "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
-                            "subtotal": c * pr_fin, "ahorro": c * (pr_orig - pr_fin), "tipo": "Propio"
+                            "subtotal": float(c * pr_fin), "ahorro": float(c * (pr_orig - pr_fin)), "tipo": "Propio"
                         })
                 
-                # --- RESUMEN FINAL OBLIGATORIO ANTES DE ENVIAR ---
                 st.markdown("<a name='resumen_local'></a>", unsafe_allow_html=True)
                 st.markdown("### 📋 Resumen del Pedido")
                 
@@ -799,6 +799,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     st.info("Aún no has seleccionado productos.")
                 else:
                     for cv in carrito_vend:
+                        # SE MUESTRA EL SUBTOTAL CON DESCUENTO APLICADO MATEMATICAMENTE (c * pr_fin)
                         st.markdown(f"🔸 **{cv['producto']}** ➔ {cv['cantidad_txt']} = **${cv['subtotal']:,.1f}**")
                     
                     st.markdown("---")
@@ -858,8 +859,13 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                             
                             for idx_item, it in enumerate(p_sel["items"]):
                                 medida_p = MEDIDAS_PLANAS.get(it["producto"], "kg")
+                                pr_u_base = PRECIOS.get(it["producto"], PRECIOS.get(NOMBRES.get(it["producto"], it["producto"]), 100))
+                                desc_u = DESCUENTOS.get(it["producto"], 0)
+                                pr_fin = pr_u_base * (1 - desc_u/100)
                                 
-                                st.markdown(f"**Pidió:** {it['producto']}  *(Cant aprox: {it['cantidad']})*")
+                                # AHORA MUESTRA EL PRECIO UNITARIO PARA QUE EL VENDEDOR VEA QUE EL DESCUENTO SE APLICÓ
+                                desc_tag = f" 🎁 -{desc_u}%" if desc_u > 0 else ""
+                                st.markdown(f"**Pidió:** {it['producto']}{desc_tag} - *Precio: ${pr_fin:,.1f}/{medida_p}*  (Cant aprox: {it['cantidad']})")
                                 
                                 if medida_p == "un":
                                     p_real = st.number_input(f"Real (un):", value=float(it['cantidad']), step=1.0, key=f"w_un_{idx_w}_{idx_item}")
@@ -876,10 +882,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                     gr = st.number_input("Gramos extra", value=float(g_in), step=25.0, key=f"w_g_{idx_w}_{idx_item}")
                                     p_real = kr + (gr / 1000.0)
                                 
-                                pr_u = PRECIOS.get(it["producto"], PRECIOS.get(NOMBRES.get(it["producto"], it["producto"]), 100))
-                                desc_u = DESCUENTOS.get(it["producto"], 0)
-                                sub_r = p_real * (pr_u * (1 - desc_u/100))
-                                ahor_iw = p_real * (pr_u * (desc_u/100))
+                                sub_r = p_real * pr_fin
+                                ahor_iw = p_real * (pr_u_base * (desc_u/100))
                                 
                                 tot_real += sub_r
                                 tot_ahor_w += ahor_iw
@@ -887,9 +891,16 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 nuevos_i.append({"producto": it["producto"], "cantidad": p_real, "cantidad_txt": c_txt, "subtotal": sub_r, "ahorro": ahor_iw, "tipo": "Propio"})
                                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
                             
+                            # RESUMEN PREVIO A ENVIAR A CAJA EN AJUSTAR PEDIDO WEB
+                            st.markdown("### 📋 Resumen del Pedido Ajustado")
+                            for ni in nuevos_i:
+                                st.markdown(f"🔸 **{ni['producto']}** ➔ {ni['cantidad_txt']} = **${ni['subtotal']:,.1f}**")
+                            st.markdown("---")
+                            
                             st.markdown(f"### Total Ajustado: **${tot_real:,.1f}**")
                             if tot_ahor_w > 0: st.success(f"Ahorro para el cliente: ${tot_ahor_w:,.1f}")
                                 
+                            st.warning("⚠️ Revisa el resumen antes de enviar este pedido a la Caja Web.")
                             if st.button("⚖️ Confirmar Pesos y Enviar a Caja Web", type="primary", use_container_width=True, key="btn_conf_pesos_web"):
                                 gc = conectar_google()
                                 ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
@@ -940,7 +951,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 st.session_state.cli_nombre = p['cliente']
                                 st.session_state.cli_celular = p['celular']
                                 st.session_state.cliente_retomado_aviso = f"⚠️ ATENCIÓN - PEDIDO RETOMADO: Estás editando el pedido de {p['cliente'].upper()} (del día {p['fecha']})."
-                                st.session_state.modo_tomar = "🛍️ Venta Local" # ACTIVA CORRECTAMENTE EL RADIO BUTTON AHORA
+                                st.session_state.modo_tomar = "🛍️ Venta Local" 
                                 st.session_state.v_rk += 1
                                 
                                 q_dict = {pr: {'kg_un': 0.0, 'gr': 0.0} for pr in productos_ord_loc}
@@ -1004,7 +1015,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         st.write(f"📅 **Fecha:** {pw['fecha']} {pw['hora']} | 📍 **Dirección:** {pw['direccion']}")
                         st.write(f"💰 **Total Estimado:** ${pw['total']:,.1f}")
                         
-                        # WHATSAPP CON DETALLE DEL PEDIDO EXTRAÍDO CORRECTAMENTE
                         items_list_wsp = []
                         for item in pw['items']:
                             items_list_wsp.append(f"• {item.get('producto', '')} ({item.get('cantidad_txt', f'{item.get('cantidad')} un/kg')})")
@@ -1051,7 +1061,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         
                         st.write(f"👤 **Cliente:** {pl['cliente']} | **Total:** ${pl['total']:,.1f}")
                         st.write(f"🛍️ **Detalle:** {pl['detalle']}")
-                        pago_l = st.selectbox("Forma de pago:", ["Efectivo", "Tarjeta", "MercadoPago", "A Cuenta"], key="p_loc")
+                        
+                        # AÑADIDO: TRANSFERENCIA EN SELECTOR DE PAGO LOCAL
+                        pago_l = st.selectbox("Forma de pago:", ["Efectivo", "Transferencia", "Tarjeta", "MercadoPago", "A Cuenta"], key="p_loc")
                         
                         if st.button("🔄 Retomar para Editar (Devolver al Vendedor)", use_container_width=True, key="btn_retomar_edit"):
                             gc = conectar_google()
@@ -1080,10 +1092,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             limpiar_cache_ventas()
                             time.sleep(1)
                             
+                            detalle_wsp = "\n• ".join(pl['detalle'].split(" | "))
+                            
                             if pago_l == "A Cuenta":
-                                msg = f"👋 Hola {pl['cliente']}, tu compra de ${pl['total']:,.1f} en *{nombre_empresa}* quedó registrada a tu cuenta. ¡Gracias!"
+                                msg = f"👋 Hola {pl['cliente']}, tu compra en *{nombre_empresa}* quedó registrada a tu cuenta.\n\n📦 *Detalle de tu compra:*\n• {detalle_wsp}\n\n💰 Total: ${pl['total']:,.1f}\n\n¡Gracias!"
                             else:
-                                msg = f"👋 Hola {pl['cliente']}, registramos tu pago de ${pl['total']:,.1f} ({pago_l}). ¡Gracias!"
+                                msg = f"👋 Hola {pl['cliente']}, registramos tu pago de ${pl['total']:,.1f} ({pago_l}).\n\n📦 *Detalle de tu compra:*\n• {detalle_wsp}\n\n¡Gracias!"
                                 
                             st.success("✅ ¡Cobro registrado!")
                             st.link_button("📲 Enviar WhatsApp", f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(pl['celular'])}&text={urllib.parse.quote(msg)}", type="primary", use_container_width=True)
@@ -1113,7 +1127,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         msg_cuenta = f"👋 Hola {pw['cliente']}, tu pedido de *{nombre_empresa}* ya está listo y pesado.\n\n📦 *Detalle final:*\n{detalle_wsp_final}\n\n💰 El total de tu cuenta es *${pw['total']:,.1f}*."
                         if ahorro_web > 0:
                             msg_cuenta += f"\n🎉 ¡Te ahorraste ${ahorro_web:,.1f} con nuestros descuentos!"
-                        msg_cuenta += "\n\n¡Muchas gracias por elegirnos! 💚"
+                            
+                        # AÑADIDO: TEXTO DE ENVÍO Y CUENTA BANCARIA EN WSP CAJA WEB
+                        msg_cuenta += f"\n\n🚚 *A la brevedad será enviado.*\n💳 *Para transferencias, nuestra cuenta es:* {cuenta_bancaria_config}\n\n¡Muchas gracias por elegirnos! 💚"
                         
                         st.link_button("📲 1. Enviar Cuenta del Pedido por WhatsApp", f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(pw['celular'])}&text={urllib.parse.quote(msg_cuenta)}", type="primary", use_container_width=True)
                         
@@ -1159,11 +1175,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             ventas_data_cuentas = obtener_ventas(st.session_state.link_feria)
             todas_o = agrupar_pedidos(ventas_data_cuentas)
             
-            # FILTROS DE DEUDA ARREGLADOS (Evitan el KeyError y no duplican pagos)
+            # FILTROS ESTRICTOS DE ABONOS Y DEUDAS PARA EVITAR "FANTASMAS" Y DUPLICADOS
             abonos_grales = [
                 o for o in todas_o 
                 if "abono" in o['estado'].lower() 
                 or "abono" in o['detalle'].lower() 
+                or "pago de deuda" in o['estado'].lower()
                 or any("pago de deuda" in i.get('producto','').lower() or "abono" in i.get('producto','').lower() for i in o['items'])
             ]
             
@@ -1180,7 +1197,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     clientes[cli]["fechas"].add(f_ord['fecha'])
                     clientes[cli]["pedidos"].append(f_ord)
                     if "fiado" in f_ord['estado'].lower() or "cuenta" in f_ord['estado'].lower() or "fiado" in f_ord['pago'].lower():
-                        clientes[cli]["tipos"].add("Fiado/A Cuenta")
+                        clientes[cli]["tipos"].add("Fiado Local")
                     if "pendiente pago" in f_ord['estado'].lower():
                         clientes[cli]["tipos"].add("Pendiente Web")
                 
@@ -1202,7 +1219,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     if saldo > 0.0:
                         fechas_str = ", ".join(list(c_info["fechas"]))
                         tip_list = list(c_info["tipos"])
-                        detalle_deuda = " / ".join(tip_list) if tip_list else "Fiado / Pendiente"
+                        detalle_deuda = " / ".join(tip_list) if tip_list else "Pendiente"
                         tabla_fw.append({"Fecha(s)": fechas_str, "Cliente": c_name, "Concepto": detalle_deuda, "Total": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo": f"${saldo:,.1f}"})
                 
                 if not tabla_fw: st.info("No hay saldos pendientes Web.")
@@ -1217,7 +1234,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         msg_rec_w = f"👋 Hola {cliente_elegido_w}, desde *{nombre_empresa}* te recordamos que tu saldo pendiente de pago es de *${saldo_actual_w:,.1f}*. ¡Muchas gracias!"
                         st.link_button("📲 Enviar Recordatorio (WhatsApp)", f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(info_cw['celular'])}&text={urllib.parse.quote(msg_rec_w)}", use_container_width=True)
                         
-                        pago_parcial_w = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(saldo_actual_w), step=1.0, key=f"pago_parc_w_{cliente_elegido_w}")
+                        # INGRESO DEL MONTO: SE LLENA SOLO CON EL TOTAL EXACTO DE LA DEUDA
+                        forma_pago_w = st.selectbox("Forma de pago del Abono:", ["Efectivo", "Transferencia", "Tarjeta", "MercadoPago"], key=f"fp_w_{cliente_elegido_w}")
+                        pago_parcial_w = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(saldo_actual_w), value=float(saldo_actual_w), step=1.0, key=f"pago_parc_w_{cliente_elegido_w}")
                         
                         if st.button("💵 Registrar Pago", type="primary", key=f"btn_reg_w_{cliente_elegido_w}"):
                             if pago_parcial_w > 0:
@@ -1227,17 +1246,19 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 ahora = datetime.now(TZ_UY)
                                 
                                 if nuevo_saldo_w <= 0.0:
-                                    msg_wsp_w = f"👋 Hola {cliente_elegido_w}, registramos tu pago de ${pago_parcial_w:,.1f}. ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
+                                    msg_wsp_w = f"👋 Hola {cliente_elegido_w}, registramos tu pago de ${pago_parcial_w:,.1f} ({forma_pago_w}). ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
                                     upds = []
                                     for pd_fiado in info_cw["pedidos"]:
                                         col_e = chr(65 + pd_fiado['idx_est'])
                                         for fi in pd_fiado['filas']:
                                             upds.append({'range': f'{col_e}{fi}', 'values': [["Web - Cobrado"]]})
                                     if upds: ws.batch_update(upds)
-                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_w, "Pago de Deuda Web", 1, -pago_parcial_w, info_cw['celular'], "Efectivo", "Web - Cobrado", "", 0, "[]"])
+                                    # SE CREA LA FILA DE CAJA COMO "WEB - COBRADO" PARA QUE CUADRE EL ARQUEO
+                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_w, "Pago de Deuda Web", 1, -pago_parcial_w, info_cw['celular'], forma_pago_w, "Web - Cobrado", "", 0, "[]"])
                                 else:
-                                    msg_wsp_w = f"👋 Hola {cliente_elegido_w}, registramos tu pago de ${pago_parcial_w:,.1f}. ⚠️ Te queda un saldo pendiente de ${nuevo_saldo_w:,.1f}."
-                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_w, "Abono a Cuenta Web", 1, -pago_parcial_w, info_cw['celular'], "Efectivo", "Web - Abono", "", 0, "[]"])
+                                    msg_wsp_w = f"👋 Hola {cliente_elegido_w}, registramos tu pago de ${pago_parcial_w:,.1f} ({forma_pago_w}). ⚠️ Te queda un saldo pendiente de ${nuevo_saldo_w:,.1f}."
+                                    # SE CREA LA FILA COMO "WEB - ABONO" PARA NO PERDERLE EL RASTRO Y EVITAR FANTASMAS LOCALES
+                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_w, "Abono a Cuenta Web", 1, -pago_parcial_w, info_cw['celular'], forma_pago_w, "Web - Abono", "", 0, "[]"])
                                 
                                 limpiar_cache_ventas()
                                 time.sleep(1)
@@ -1254,7 +1275,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     if saldo > 0.0:
                         fechas_str = ", ".join(list(c_info["fechas"]))
                         tip_list = list(c_info["tipos"])
-                        detalle_deuda = " / ".join(tip_list) if tip_list else "Fiado / Pendiente"
+                        detalle_deuda = " / ".join(tip_list) if tip_list else "Fiado"
                         tabla_fl.append({"Fecha(s)": fechas_str, "Cliente": c_name, "Concepto": detalle_deuda, "Total": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo": f"${saldo:,.1f}"})
                 
                 if not tabla_fl: st.info("No hay saldos pendientes Locales/Fiados.")
@@ -1269,7 +1290,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         msg_rec_l = f"👋 Hola {cliente_elegido_l}, desde *{nombre_empresa}* te recordamos que tu saldo pendiente de pago es de *${saldo_actual_l:,.1f}*. ¡Muchas gracias!"
                         st.link_button("📲 Enviar Recordatorio (WhatsApp)", f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(info_cl['celular'])}&text={urllib.parse.quote(msg_rec_l)}", use_container_width=True)
                         
-                        pago_parcial_l = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(saldo_actual_l), step=1.0, key=f"pago_parc_l_{cliente_elegido_l}")
+                        forma_pago_l = st.selectbox("Forma de pago del Abono:", ["Efectivo", "Transferencia", "Tarjeta", "MercadoPago"], key=f"fp_l_{cliente_elegido_l}")
+                        pago_parcial_l = st.number_input("Monto que paga el cliente ($):", min_value=0.0, max_value=float(saldo_actual_l), value=float(saldo_actual_l), step=1.0, key=f"pago_parc_l_{cliente_elegido_l}")
                         
                         if st.button("💵 Registrar Pago", type="primary", key=f"btn_reg_l_{cliente_elegido_l}"):
                             if pago_parcial_l > 0:
@@ -1279,17 +1301,17 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 ahora = datetime.now(TZ_UY)
                                 
                                 if nuevo_saldo_l <= 0.0:
-                                    msg_wsp_l = f"👋 Hola {cliente_elegido_l}, registramos tu pago de ${pago_parcial_l:,.1f}. ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
+                                    msg_wsp_l = f"👋 Hola {cliente_elegido_l}, registramos tu pago de ${pago_parcial_l:,.1f} ({forma_pago_l}). ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
                                     upds = []
                                     for pd_fiado in info_cl["pedidos"]:
                                         col_e = chr(65 + pd_fiado['idx_est'])
                                         for fi in pd_fiado['filas']:
                                             upds.append({'range': f'{col_e}{fi}', 'values': [["Cobrado"]]})
                                     if upds: ws.batch_update(upds)
-                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_l, "Pago de Deuda Local", 1, -pago_parcial_l, info_cl['celular'], "Efectivo", "Cobrado", "", 0, "[]"])
+                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_l, "Pago de Deuda Local", 1, -pago_parcial_l, info_cl['celular'], forma_pago_l, "Cobrado", "", 0, "[]"])
                                 else:
-                                    msg_wsp_l = f"👋 Hola {cliente_elegido_l}, registramos tu pago de ${pago_parcial_l:,.1f}. ⚠️ Te queda un saldo pendiente de ${nuevo_saldo_l:,.1f}."
-                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_l, "Abono a Cuenta Local", 1, -pago_parcial_l, info_cl['celular'], "Efectivo", "Cuenta Corriente", "", 0, "[]"])
+                                    msg_wsp_l = f"👋 Hola {cliente_elegido_l}, registramos tu pago de ${pago_parcial_l:,.1f} ({forma_pago_l}). ⚠️ Te queda un saldo pendiente de ${nuevo_saldo_l:,.1f}."
+                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_l, "Abono a Cuenta Local", 1, -pago_parcial_l, info_cl['celular'], forma_pago_l, "Abono Local", "", 0, "[]"])
                                 
                                 limpiar_cache_ventas()
                                 time.sleep(1)
@@ -1558,10 +1580,12 @@ if st.session_state.rol_logueado == "Admin":
         try:
             todas_w = agrupar_pedidos(ventas_data_global)
             
+            # FILTROS ESTRICTOS PARA REPORTES (Misma lógica segura que en Cuentas a Cobrar)
             abonos_grales = [
                 o for o in todas_w 
                 if "abono" in o['estado'].lower() 
                 or "abono" in o['detalle'].lower() 
+                or "pago de deuda" in o['estado'].lower()
                 or any("pago de deuda" in i.get('producto','').lower() or "abono" in i.get('producto','').lower() for i in o['items'])
             ]
             
@@ -1578,7 +1602,7 @@ if st.session_state.rol_logueado == "Admin":
                 
                 resumen_saldos[cli]["Total"] += round(amt, 2)
                 if "fiado" in o['estado'].lower() or "cuenta" in o['estado'].lower() or "fiado" in o['pago'].lower():
-                    resumen_saldos[cli]["Tipos"].add("Fiado/A Cuenta")
+                    resumen_saldos[cli]["Tipos"].add("Fiado Local")
                 if "pendiente pago" in o['estado'].lower():
                     resumen_saldos[cli]["Tipos"].add("Pendiente Web")
             
@@ -1593,7 +1617,7 @@ if st.session_state.rol_logueado == "Admin":
                 saldo = round(d["Total"] - d["Pagado"], 1)
                 if saldo > 0.0:
                     tip_list = list(d["Tipos"])
-                    detalle_deuda = " / ".join(tip_list) if tip_list else "Fiado / Pendiente"
+                    detalle_deuda = " / ".join(tip_list) if tip_list else "Pendiente"
                     row = {"Cliente": cli, "Detalle Deuda": detalle_deuda, "Total Pedido": f"${d['Total']:,.1f}", "Pagado": f"${d['Pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"}
                     if d["EsWeb"]: tabla_w.append(row)
                     else: tabla_l.append(row)
