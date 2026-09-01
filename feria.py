@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTO CONTRASTE (CÓDIGO ANTI-ROTURAS)
+# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTO CONTRASTE
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -356,7 +356,6 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 pr_fin = precio_orig * (1 - desc_p/100)
                 
-                # MOSTRAR DESCUENTO CLARAMENTE TACHANDO EL PRECIO VIEJO
                 if desc_p > 0:
                     desc_tag = f" <span style='color: white; background-color: #d32f2f; padding: 2px 6px; border-radius: 4px; font-size: 12px;'>🎁 -{desc_p}%</span>"
                     precio_str = f"<span style='text-decoration: line-through; color: #888; font-size: 13px;'>${precio_orig:,.1f}</span> <span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${pr_fin:,.1f}/{medida_p}</span>"
@@ -609,7 +608,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
     tabs_nombres.append("📝 Tomar Pedido")
 if st.session_state.rol_logueado in ["Admin", "Cajero"]: 
     tabs_nombres.append("🌐 Estado Pedidos Web")
-    tabs_nombres.append("💰 Caja y Cobro")
+    tabs_nombres.append("💰 Caja")
     tabs_nombres.append("💳 Cuentas A Cobrar")
     tabs_nombres.append("🛵 Entregas a Domicilio")
 if st.session_state.rol_logueado == "Admin": 
@@ -634,10 +633,10 @@ with tabs[idx]:
         "( Envía por WhatsApp )                                  ( Pesa en balanza )\n"
         "                                                                |\n"
         "                                                                v\n"
-        "[ 🏪 VENTA LOCAL ]  ---> ( Tomar Pedido ) --------> [ 💳 CAJA Y COBRO ]\n"
-        "       ^                                                        |\n"
-        "       |                                                        +---> [ 🛵 Reparto / Logística ]\n"
-        "( Retomar desde Caja )                                          +---> [ 💳 Cuentas a Cobrar ]", 
+        "[ 🏪 VENTA LOCAL ]  ---> ( Tomar Pedido ) --------> [ 💳 CAJA ]\n"
+        "       ^                                                |\n"
+        "       |                                                +---> [ 🛵 Reparto / Logística ]\n"
+        "( Retomar desde Caja )                                  +---> [ 💳 Cuentas a Cobrar ]", 
         language="text"
     )
     
@@ -647,9 +646,9 @@ with tabs[idx]:
         "* **📝 Tomar Pedido (Ventas Locales):** PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) y luego aprieta el botón de bajar al Resumen para enviar a Caja (o el botón ⬇️ de ver resumen al lado de cada producto). Si la caja devuelve un pedido para editar, aparecerá en **Retomar Pendientes** con su respectivo aviso.\n\n"
         "* **🌐 Estado Pedidos Web:** Recibe automáticamente las compras hechas por los clientes desde la web. Primero envías el WhatsApp de confirmación y luego haces clic en **'Enviar a Preparar'**.\n\n"
         "* **⚖️ Ajustar Pedido Web:** Aquí llegan los pedidos web confirmados. El vendedor los pesa con exactitud en la balanza antes de enviarlos a la caja.\n\n"
-        "* **💰 Caja y Cobro:** El cajero procesa los pagos en efectivo, tarjeta, transferencia o cuenta corriente. Si hay un error, puede devolver el pedido al vendedor con el botón **'Retomar para Editar'**.\n\n"
+        "* **💰 Caja:** El cajero procesa los pagos en efectivo, transferencia, tarjeta o cuenta corriente. Si hay un error, puede devolver el pedido al vendedor con el botón **'Retomar para Editar'**.\n\n"
         "* **💳 Cuentas a Cobrar:** Administra los saldos pendientes divididos en dos solapas: deudas Web y fiados Locales. Muestra la **fecha exacta** del pedido y permite registrar pagos parciales o totales especificando el método de pago.\n\n"
-        "* **🛵 Entregas a Domicilio:** Gestiona la logística. Muestra los pedidos armados con su fecha y dirección. El botón de WhatsApp **'Va en Camino'** está arriba y **'Marcar como Entregado'** debajo."
+        "* **🛵 Entregas a Domicilio:** Gestiona la logística. Muestra todos los pedidos que requieren envío (hayan sido pagados o estén a cuenta). El botón de WhatsApp **'Va en Camino'** está arriba y **'Marcar como Entregado'** debajo."
     )
 idx += 1
 
@@ -1025,7 +1024,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             items_list_wsp.append(f"• {item.get('producto', '')} ({item.get('cantidad_txt', f'{item.get('cantidad')} un/kg')})")
                         detalle_wsp = "\n".join(items_list_wsp)
                         
-                        # MENSAJE DE WHATSAPP CON DETALLE Y TOTAL A LA BREVEDAD
                         msg_ack = f"👋 Hola {pw['cliente']}, recibimos tu pedido en *{nombre_empresa}* y ya se lo pasamos al equipo para que comience a prepararlo, y te enviaremos a la brevedad el total de tu compra.\n\n📦 *Detalle de tu pedido:*\n{detalle_wsp}\n\n¡Muchas gracias por elegirnos! 💚"
                         link_w_conf = f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(pw['celular'])}&text={urllib.parse.quote(msg_ack)}"
                         st.link_button("📲 1. Enviar WhatsApp ('Hemos recibido tu pedido')", link_w_conf, type="primary", use_container_width=True)
@@ -1047,11 +1045,11 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 4: CAJA Y COBRO
+# PESTAÑA 4: CAJA
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
-        st.write("### 💳 Módulo de Caja y Cobro")
+        st.write("### 💳 Módulo de Caja")
         sub_caja_1, sub_caja_2 = st.tabs(["🏪 Ventas Locales en Caja", "🌐 Pedidos Web (Envío de Cuenta)"])
         
         with sub_caja_1:
@@ -1178,7 +1176,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             ventas_data_cuentas = obtener_ventas(st.session_state.link_feria)
             todas_o = agrupar_pedidos(ventas_data_cuentas)
             
-            # FILTROS ESTRICTOS QUE RESUELVEN EL ERROR DE KEYERROR "PRODUCTO"
             abonos_grales = [
                 o for o in todas_o 
                 if "abono" in o['estado'].lower() 
@@ -1349,18 +1346,27 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         try:
             todas = agrupar_pedidos(ventas_data_global)
             
+            # FILTRO QUE MUESTRA TODO LO QUE ESTÁ LISTO PARA ENTREGAR (Incluyendo Web - Pendiente Pago o Cuentas con deudas)
             ent_pendientes = []
             for e in todas:
                 est_l = e['estado'].lower()
                 if "entregado" in est_l or "cancelado" in est_l:
                     continue
+                # Se omiten solo los que aún están siendo procesados en caja o no pesados:
                 if "caja" in est_l or est_l == "web - pendiente" or est_l == "web - confirmado" or est_l == "pendiente":
                     continue
-                if e["direccion"].strip() == "":
+                # Se omiten los registros que son pagos puros:
+                if "abono" in est_l or "abono" in e['detalle'].lower() or "pago de deuda" in est_l:
                     continue
-                ent_pendientes.append(e)
+                
+                # Deben aparecer si tienen dirección física o si son de procedencia web
+                is_web = "web" in est_l or "web" in str(e.get('vendedor', '')).lower()
+                has_address = e["direccion"].strip() != ""
+                
+                if has_address or is_web:
+                    ent_pendientes.append(e)
             
-            ent_entregados_total = [e for e in todas if "entregado" in e['estado'].lower() and e["direccion"].strip() != ""]
+            ent_entregados_total = [e for e in todas if "entregado" in e['estado'].lower() and (e["direccion"].strip() != "" or "web" in e['estado'].lower())]
             ent_entregados_ultimos = ent_entregados_total[-25:] 
             ent_entregados_ultimos.reverse() 
 
@@ -1370,19 +1376,21 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 tabla_ent = []
                 for ent in ent_pendientes:
                     estado_str = ent['estado'].lower()
+                    # MUESTRA EL ESTADO EN LA TABLA
                     estado_pago = "✅ Cancelado (Pagado)" if "cobrado" in estado_str else f"⚠️ Saldo: ${ent['total']:,.1f}"
+                    dir_mostrar = ent['direccion'] if ent['direccion'].strip() else "Acordar con cliente"
                     
                     tabla_ent.append({
                         "Fecha Pedido": f"{ent['fecha']} {ent['hora']}",
                         "Cliente": ent['cliente'],
-                        "Dirección": ent['direccion'],
+                        "Dirección": dir_mostrar,
                         "Monto": f"${ent['total']:,.1f}",
                         "Estado Pago": estado_pago
                     })
                 st.dataframe(pd.DataFrame(tabla_ent), use_container_width=True)
                 
                 st.write("#### Acciones de Logística:")
-                sel_ent = st.selectbox("Seleccionar entrega:", ["Seleccionar..."] + [f"{e['cliente']} - {e['direccion']} (ID {e['filas'][0]})" for e in ent_pendientes], key="sel_ent_box")
+                sel_ent = st.selectbox("Seleccionar entrega:", ["Seleccionar..."] + [f"{e['cliente']} - {e['direccion'] if e['direccion'].strip() else 'Sin Dir'} (ID {e['filas'][0]})" for e in ent_pendientes], key="sel_ent_box")
                 if sel_ent != "Seleccionar...":
                     id_e = int(sel_ent.split("(ID ")[1].replace(")", ""))
                     ent_sel = next(x for x in ent_pendientes if x['filas'][0] == id_e)
@@ -1415,10 +1423,11 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             else:
                 tabla_hoy = []
                 for eh in ent_entregados_ultimos:
+                    dir_mostrar_h = eh['direccion'] if eh['direccion'].strip() else "Acordar con cliente"
                     tabla_hoy.append({
                         "Fecha de Pedido": eh['fecha'],
                         "Cliente": eh['cliente'],
-                        "Dirección": eh['direccion'],
+                        "Dirección": dir_mostrar_h,
                         "Estado Final": eh['estado']
                     })
                 st.dataframe(pd.DataFrame(tabla_hoy), use_container_width=True)
