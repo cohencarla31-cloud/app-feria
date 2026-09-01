@@ -8,38 +8,55 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTO CONTRASTE (MODO OSCURO/CLARO)
+# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTO CONTRASTE (BOTONES LEGIBLES)
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
-    /* PESTAÑAS (TABS) GRANDES Y CON ALTO CONTRASTE */
+    /* PESTAÑAS (TABS) SUPER CLARAS */
     .stTabs [data-baseweb="tab-list"] { gap: 6px; justify-content: center; }
     .stTabs [data-baseweb="tab"] {
         height: 55px; white-space: pre-wrap; background-color: #ffffff;
         border-radius: 10px; font-size: 16px; font-weight: 700;
-        padding: 0 15px; border: 2px solid #66BB6A; color: #1b5e20;
+        padding: 0 15px; border: 2px solid #2e7b32; color: #1b5e20;
     }
     .stTabs [aria-selected="true"] { background-color: #2e7b32 !important; border-color: #1b5e20 !important; color: #ffffff !important; }
     
-    /* TEXTOS CLAROS Y LEGIBLES SOBRE CUALQUIER FONDO */
-    p, label, span, div, .stMarkdown { color: #222222 !important; }
-    [data-testid="stAppViewContainer"] p, [data-testid="stAppViewContainer"] span { color: inherit; }
+    /* TEXTOS GENERALES LEGIBLES */
+    p, label, span, div, .stMarkdown { color: #111111 !important; }
     
-    /* RADIO BUTTONS DE ACCIÓN CON CONTRASTE AL SELECCIONAR */
-    div.row-widget.stRadio > div { flex-wrap: wrap; justify-content: center; gap: 8px; }
-    div.row-widget.stRadio > div > label { background-color: #ffffff; padding: 10px 15px; border-radius: 8px; font-size: 16px; border: 2px solid #2e7b32; cursor: pointer; margin: 2px; color: #1b5e20 !important; font-weight: bold; }
-    div.row-widget.stRadio > div > label:hover { background-color: #e8f5e9; }
-    
+    /* BOTONES PRIMARIOS (VERDES): TEXTO BLANCO BRILLANTE Y FONDO VERDE VIVO */
+    button[kind="primary"] {
+        background-color: #2e7b32 !important;
+        border: 2px solid #1b5e20 !important;
+        color: #ffffff !important;
+        font-weight: 900 !important;
+        font-size: 16px !important;
+        padding: 12px !important;
+    }
+    button[kind="primary"]:hover {
+        background-color: #1b5e20 !important;
+    }
+
+    /* ALERTAS / ERRORES (ROJOS): TEXTO BLANCO Y FONDO ROJO INTENSO */
+    .stAlert {
+        color: #ffffff !important;
+    }
+    div[data-baseweb="notification"] {
+        background-color: #d32f2f !important;
+        color: #ffffff !important;
+    }
+    div[data-baseweb="notification"] p {
+        color: #ffffff !important;
+        font-weight: bold !important;
+    }
+
     html, body, [data-testid="stAppViewContainer"] { overscroll-behavior-y: none !important; -webkit-overflow-scrolling: touch; }
     [data-testid="stMainBlockContainer"] { padding-bottom: 140px !important; }
     [data-testid="stSidebar"], [data-testid="collapsedControl"], footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
     button[title="View fullscreen"] { display: none !important; visibility: hidden !important; }
     [data-testid="StyledFullScreenButton"] { display: none !important; visibility: hidden !important; }
-    
-    button[kind="primary"] { background-color: #2e7b32 !important; border-color: #1b5e20 !important; color: white !important; font-weight: bold !important; font-size: 16px !important; padding: 10px !important; }
-    button[kind="primary"]:hover { background-color: #388e3c !important; }
     
     @media (max-width: 600px) {
         div[data-testid="stHorizontalBlock"] { flex-direction: row !important; flex-wrap: nowrap !important; gap: 6px !important; }
@@ -281,7 +298,7 @@ if "feria" in query_params:
         with st.expander("ℹ️ Pasos para tu Pedido Online", expanded=(st.session_state.web_step == 1)):
             st.markdown("""
             1️⃣ **Datos:** Completa tu nombre, celular y dirección.
-            2️⃣ **Productos:** Elige **TODO** lo que vas a llevar y luego avanza al carrito (puedes usar el botón "Ir a mi carrito" junto a cualquier verdura o arriba/abajo).
+            2️⃣ **Productos:** **PRIMERO ELIGE LA MERCADERÍA CON SU PESO** y luego aprieta el botón de **'IR A MI CARRITO'** (arriba o abajo).
             3️⃣ **Revisión:** Verifica el total de tu compra.
             4️⃣ **Confirmar:** Envía el WhatsApp para asegurar el pedido.
             """)
@@ -290,26 +307,6 @@ if "feria" in query_params:
         st.divider()
 
         if 'q_web' not in st.session_state: st.session_state.q_web = {}
-
-        def procesar_carrito_web():
-            st.session_state.carrito_web = []
-            for p, dict_q in st.session_state.q_web.items():
-                m = medidas.get(p, "kg")
-                c = dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
-                if c > 0:
-                    pr_orig = precios.get(p, 0)
-                    desc_p = descuentos.get(p, 0)
-                    pr_fin = pr_orig * (1 - desc_p/100)
-                    st.session_state.carrito_web.append({
-                        "producto": nombres_planos.get(p, p),
-                        "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
-                        "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
-                    })
-            if not st.session_state.carrito_web:
-                st.warning("⚠️ Debes sumar cantidades a al menos un producto.")
-            else:
-                st.session_state.web_step = 3
-                st.rerun()
 
         if st.session_state.web_step == 1:
             st.subheader("1️⃣ Tus Datos de Entrega")
@@ -336,10 +333,31 @@ if "feria" in query_params:
 
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
-            st.info("💡 **Tip:** Puedes presionar el botón **'🛒 Ir a mi carrito'** ubicado arriba, abajo o **al lado de cualquier verdura** en cualquier momento para avanzar.")
+            st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA EL BOTÓN 'IR A MI CARRITO'** (puedes usar el botón de arriba o el de abajo del todo).")
             
-            if st.button("🛒 Ir a mi carrito ➡️", type="primary", use_container_width=True, key="btn_cart_top_web"):
-                procesar_carrito_web()
+            def procesar_carrito_cliente():
+                st.session_state.carrito_web = []
+                for p, dict_q in st.session_state.q_web.items():
+                    m = medidas.get(p, "kg")
+                    c = dict_q['kg_un'] + (dict_q['gr'] / 1000.0)
+                    if c > 0:
+                        pr_orig = precios.get(p, 0)
+                        desc_p = descuentos.get(p, 0)
+                        pr_fin = pr_orig * (1 - desc_p/100)
+                        st.session_state.carrito_web.append({
+                            "producto": nombres_planos.get(p, p),
+                            "cantidad": c, "cantidad_txt": f"{int(c)}un" if m=="un" else f"{c}kg",
+                            "subtotal": c * pr_fin, "ahorro": c*(pr_orig - pr_fin)
+                        })
+                if not st.session_state.carrito_web:
+                    st.warning("⚠️ Debes sumar cantidades a al menos un producto.")
+                else:
+                    st.session_state.web_step = 3
+                    st.rerun()
+
+            # --- BOTÓN SUPERIOR ---
+            if st.button("🛒 IR A MI CARRITO", type="primary", use_container_width=True, key="btn_cart_top_web"):
+                procesar_carrito_cliente()
 
             st.markdown("---")
             filtro_txt = st.text_input("🔍 Buscar fruta o verdura por nombre...", "").lower()
@@ -356,13 +374,7 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                # ENCABEZADO DE PRODUCTO Y BOTÓN LATERAL "IR AL CARRITO"
-                col_prod_info, col_prod_btn = st.columns([0.7, 0.3])
-                with col_prod_info:
-                    st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
-                with col_prod_btn:
-                    if st.button("🛒 Ir al carrito", key=f"lat_cart_{prod_full}_{st.session_state.web_rk}", use_container_width=True):
-                        procesar_carrito_web()
+                st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 
                 if medida_p == "un":
                     st.session_state.q_web[prod_full]['kg_un'] = st.number_input(
@@ -381,12 +393,13 @@ if "feria" in query_params:
                         value=float(st.session_state.q_web[prod_full]['gr']), 
                         key=f"w_g_{prod_full}_{st.session_state.web_rk}"
                     )
-                st.markdown("<hr style='margin: 12px 0 16px 0; border: 1px solid #ccc;'>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
             st.divider()
             
-            if st.button("🛒 Ir a mi carrito ➡️", type="primary", use_container_width=True, key="btn_cart_bottom_web"):
-                procesar_carrito_web()
+            # --- BOTÓN INFERIOR ---
+            if st.button("🛒 IR A MI CARRITO", type="primary", use_container_width=True, key="btn_cart_bottom_web"):
+                procesar_carrito_cliente()
 
             if st.button("⬅️ Atrás", use_container_width=True, key="btn_back_step2_web"):
                 st.session_state.web_step = 1
@@ -603,7 +616,7 @@ tabs = st.tabs(tabs_nombres)
 idx = 0
 
 # =======================================================
-# PESTAÑA 1: GUÍA Y DIAGRAMA DE FLUJO VISUAL
+# PESTAÑA 1: GUÍA Y DIAGRAMA DE FLUJO VISUAL COMPLETO
 # =======================================================
 with tabs[idx]:
     st.write("### 📖 Guía de Uso y Diagrama de Flujo del Sistema")
@@ -626,12 +639,13 @@ with tabs[idx]:
     
     st.markdown("---")
     st.markdown("""
-    **📋 Explicación rápida de cada sección:**
-    * **📝 Tomar Pedido:** Aquí creas las ventas del local o, si el cajero te devuelve un pedido para agregarle algo, lo retomas aquí.
-    * **🌐 Estado Pedidos Web:** Recibe los pedidos que los clientes mandan por internet. Envías el WhatsApp de recibido y luego das clic en **'Enviar a Preparar'**.
-    * **⚙️ Ajustar Pedido Web:** Aquí llegan los pedidos web ya confirmados para pesarlos exactamente en la balanza antes de mandarlos a caja.
-    * **💰 Caja y Cobro:** El cajero procesa los cobros. Si se equivocó en un pedido local, puede devolverlo al vendedor con el botón de retomar.
-    * **🛵 Entregas a Domicilio:** Gestiona el reparto. El botón de WhatsApp **'Va en Camino'** está arriba y el de **'Marcar como Entregado'** debajo.
+    **📋 Explicación detallada de cada módulo:**
+    * **📝 Tomar Pedido (Ventas Locales):** Aquí el vendedor registra las compras del local. **Instrucción:** PRIMERO ELIGE LA MERCADERÍA CON SU PESO y luego aprieta el botón de enviar a caja (arriba o abajo). Si la caja devuelve un pedido para editar, aparecerá en **Retomar Pendientes**.
+    * **🌐 Estado Pedidos Web:** Recibe automáticamente las compras hechas por los clientes desde la web. Primero envías el WhatsApp de confirmación y luego haces clic en **'Enviar a Preparar'**.
+    * **⚖️ Ajustar Pedido Web:** Aquí llegan los pedidos web confirmados. El vendedor los pesa con exactitud en la balanza antes de enviarlos a la caja.
+    * **💰 Caja y Cobro:** El cajero procesa los pagos en efectivo, tarjeta o cuenta corriente. Si hay un error, puede devolver el pedido al vendedor con el botón **'Retomar para Editar'**.
+    * **💳 Cuentas a Cobrar:** Administra los saldos pendientes divididos en dos solapas: deudas Web y fiados Locales. Muestra la **fecha exacta** del pedido y permite registrar pagos parciales o totales.
+    * **🛵 Entregas a Domicilio:** Gestiona la logística. Muestra los pedidos armados con su fecha y dirección. El botón de WhatsApp **'Va en Camino'** está arriba y **'Marcar como Entregado'** abajo.
     """)
 idx += 1
 
@@ -698,7 +712,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 st.divider()
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
-                st.warning("⚠️ **Importante:** Selecciona todos los productos recorriendo la lista, y al finalizar presiona el botón **'Enviar a Caja'** (o los botones laterales junto a cualquier verdura).")
+                st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA EL BOTÓN 'ENVIAR A CAJA'** (puedes usar el botón de arriba o el de abajo del todo).")
                 
                 def procesar_carrito_local():
                     tot_c_rapido = 0.0
@@ -768,21 +782,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    # BOTÓN LATERAL AL LADO DE CADA VERDURA
-                    col_pinfo, col_pbtn = st.columns([0.7, 0.3])
-                    with col_pinfo:
-                        st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
-                    with col_pbtn:
-                        if st.button("🚀 Enviar", key=f"lat_caja_{prod_full}_{st.session_state.v_rk}", use_container_width=True):
-                            procesar_carrito_local()
-                    
                     if medida_p == "un":
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
-                            "Cantidad (Unidades)", min_value=0.0, step=1.0, 
+                            f"{prod_full} (${p_final:,.1f}/un)", min_value=0.0, step=1.0, 
                             key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
                             value=float(st.session_state.q_loc[prod_full]['kg_un'])
                         )
                     else:
+                        st.markdown(f"<div style='margin-top: 5px; margin-bottom: 2px;'><b style='font-size: 16px;'>{prod_full}</b> <span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
                             "Kilos (Ej: 0.5 medio, 1.5 kilo y medio)", min_value=0.0, step=0.5, 
                             key=f"loc_k_{prod_full}_{st.session_state.v_rk}", 
@@ -818,7 +825,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 if tot_ahor > 0: st.success(f"🎉 Ahorro Total del Cliente: ${tot_ahor:,.1f}")
                 st.divider()
 
-                if st.button("🚀 Enviar a Caja (Final)", type="primary", use_container_width=True, key="btn_caja_bottom_loc"):
+                if st.button("🚀 ENVIAR A CAJA (Final)", type="primary", use_container_width=True, key="btn_caja_bottom_loc"):
                     procesar_carrito_local()
 
             elif st.session_state.modo_tomar == "🌐 Ajustar Pedido Web":
@@ -919,7 +926,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                         for p in mis_pendientes:
                             st.write(f"📦 **[🏪 LOCAL] {p['cliente']}** - ${p['total']:,.1f} ({p['fecha']} - {p['hora']})")
                             
-                            # BOTÓN DE RETOMAR DEBAJO DEL CLIENTE
                             if st.button("🔄 Retomar Pedido", key=f"ret_panel_{p['filas'][0]}", type="primary", use_container_width=True):
                                 st.session_state.cli_nombre = p['cliente']
                                 st.session_state.cli_celular = p['celular']
@@ -991,7 +997,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         
                         st.markdown("<br>", unsafe_allow_html=True)
                         
-                        if st.button("✅ 2. Enviar a Preparar (Confirmar Recepción)", key=f"conf_w_{pw['filas'][0]}", use_container_width=True):
+                        if st.button("✅ 2. Enviar a Preparar (Confirmar Recepción)", key=f"conf_w_{pw['filas'][0]}", type="primary", use_container_width=True):
                             gc = conectar_google()
                             ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
                             col_e = chr(65 + pw['idx_est'])
@@ -1109,7 +1115,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 5: CUENTAS A COBRAR
+# PESTAÑA 5: CUENTAS A COBRAR (CON FECHAS DE LOS PEDIDOS)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1134,8 +1140,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 for f_ord in lista_pedidos:
                     cli = f_ord['cliente']
                     if cli not in clientes: 
-                        clientes[cli] = {"total": 0.0, "pagado": 0.0, "celular": f_ord['celular'], "pedidos": []}
+                        clientes[cli] = {"total": 0.0, "pagado": 0.0, "celular": f_ord['celular'], "pedidos": [], "fechas": set()}
                     clientes[cli]["total"] += round(f_ord['total'], 2)
+                    clientes[cli]["fechas"].add(f_ord['fecha'])
                     clientes[cli]["pedidos"].append(f_ord)
                 
                 for ab in abonos:
@@ -1154,7 +1161,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 for c_name, c_info in ctas_web.items():
                     saldo = round(c_info["total"] - c_info["pagado"], 1)
                     if saldo > 0.0:
-                        tabla_fw.append({"Cliente": c_name, "Total Pedido": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"})
+                        fechas_str = ", ".join(list(c_info["fechas"]))
+                        tabla_fw.append({"Fecha(s)": fechas_str, "Cliente": c_name, "Total": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo": f"${saldo:,.1f}"})
                 
                 if not tabla_fw: st.info("No hay saldos pendientes Web.")
                 else:
@@ -1202,7 +1210,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 for c_name, c_info in ctas_local.items():
                     saldo = round(c_info["total"] - c_info["pagado"], 1)
                     if saldo > 0.0:
-                        tabla_fl.append({"Cliente": c_name, "Total Pedido": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"})
+                        fechas_str = ", ".join(list(c_info["fechas"]))
+                        tabla_fl.append({"Fecha(s)": fechas_str, "Cliente": c_name, "Total": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo": f"${saldo:,.1f}"})
                 
                 if not tabla_fl: st.info("No hay saldos pendientes Locales/Fiados.")
                 else:
@@ -1389,7 +1398,6 @@ if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
         st.write("### 📈 Reportes Pro y Analítica Financiera")
         
-        # FILTROS AVANZADOS DE FECHA Y CLIENTE
         st.markdown("#### 🔍 Filtros de Búsqueda")
         col_f1, col_f2 = st.columns(2)
         with col_f1:
@@ -1400,7 +1408,6 @@ if st.session_state.rol_logueado == "Admin":
         try:
             ordenes_admin_crudo = agrupar_pedidos(ventas_data_global, None)
             
-            # APLICAR FILTROS
             ordenes_admin = []
             for p in ordenes_admin_crudo:
                 ok_f = True
