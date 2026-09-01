@@ -14,15 +14,32 @@ st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_si
 
 estilos_css = [
     "<style>",
+    "/* PESTAÑAS (TABS) SUPER CLARAS */",
     ".stTabs [data-baseweb='tab-list'] { gap: 6px; justify-content: center; }",
-    ".stTabs [data-baseweb='tab'] { height: 55px; white-space: pre-wrap; background-color: #ffffff; border-radius: 10px; font-size: 16px; font-weight: 700; padding: 0 15px; border: 2px solid #2e7b32; color: #1b5e20; }",
-    ".stTabs [aria-selected='true'] { background-color: #2e7b32 !important; border-color: #1b5e20 !important; color: #ffffff !important; }",
+    ".stTabs [data-baseweb='tab'] { height: 55px; white-space: pre-wrap; background-color: #ffffff; border-radius: 10px; font-size: 16px; font-weight: 700; padding: 0 15px; border: 2px solid #4CAF50; color: #1b5e20; }",
+    "/* ESTO FUERZA LA PESTAÑA ACTIVA A VERDE CLARO CON TEXTO BLANCO */",
+    ".stTabs [aria-selected='true'], .stTabs [aria-selected='true'] * { background-color: #4CAF50 !important; border-color: #388E3C !important; color: #ffffff !important; }",
+    
+    "/* RADIO BUTTONS DE ACCIONES (Venta Local, Ajustar, Retomar) */",
+    "div.row-widget.stRadio > div { flex-wrap: wrap; justify-content: center; gap: 8px; }",
+    "div.row-widget.stRadio > div > label { background-color: #f0f2f6 !important; padding: 10px 15px; border-radius: 8px; font-size: 15px; border: 2px solid #4CAF50; cursor: pointer; margin: 2px; color: #111111 !important; font-weight: bold !important; }",
+    "/* RADIO ACTIVO A VERDE CLARO CON TEXTO BLANCO */",
+    "div.row-widget.stRadio > div > label[data-baseweb='radio'] input:checked + div, div.row-widget.stRadio > div > label[data-baseweb='radio'] input:checked + div * { background-color: #4CAF50 !important; color: #ffffff !important; }",
+    
+    "/* TEXTOS GENERALES EN NEGRITA Y OSCUROS */",
     "p, label, span, div, .stMarkdown { color: #111111 !important; font-weight: 600; }",
+    
+    "/* BOTONES PRIMARIOS: BLANCOS CON LETRA NEGRA GIGANTE Y EN NEGRITA */",
     "button[kind='primary'] { background-color: #ffffff !important; border: 3px solid #111111 !important; color: #111111 !important; font-weight: 900 !important; font-size: 18px !important; padding: 14px !important; border-radius: 8px !important; box-shadow: 0px 4px 6px rgba(0,0,0,0.2); }",
     "button[kind='primary']:hover { background-color: #f0f0f0 !important; color: #000000 !important; }",
+    
+    "/* BOTONES SECUNDARIOS */",
     "button { font-weight: bold !important; color: #111111 !important; }",
+    
+    "/* ALERTAS / ERRORES ROJOS */",
     "div[data-baseweb='notification'] { background-color: #d32f2f !important; color: #ffffff !important; }",
     "div[data-baseweb='notification'] p { color: #ffffff !important; font-weight: bold !important; font-size: 16px !important; }",
+    
     "html, body, [data-testid='stAppViewContainer'] { overscroll-behavior-y: none !important; -webkit-overflow-scrolling: touch; }",
     "[data-testid='stMainBlockContainer'] { padding-bottom: 140px !important; }",
     "[data-testid='stSidebar'], [data-testid='collapsedControl'], footer, header, [data-testid='stToolbar'], [data-testid='stDecoration'] { display: none !important; visibility: hidden !important; }",
@@ -266,10 +283,12 @@ if "feria" in query_params:
         if bienvenida_dia: st.info(f"🔥 **OFERTAS Y NOVEDADES:**\n\n{bienvenida_dia}")
         
         with st.expander("ℹ️ Pasos para tu Pedido Online", expanded=(st.session_state.web_step == 1)):
-            st.markdown("1️⃣ **Datos:** Completa tu nombre, celular y dirección.")
-            st.markdown("2️⃣ **Productos:** **PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO)** y luego aprieta el botón de **'IR A MI CARRITO'**.")
-            st.markdown("3️⃣ **Revisión:** Verifica el total de tu compra.")
-            st.markdown("4️⃣ **Confirmar:** Envía el WhatsApp para asegurar el pedido.")
+            st.markdown(
+                "1️⃣ **Datos:** Completa tu nombre, celular y dirección.\n"
+                "2️⃣ **Productos:** **PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO)** y luego aprieta el botón de **'IR A MI CARRITO'**.\n"
+                "3️⃣ **Revisión:** Verifica el total de tu compra.\n"
+                "4️⃣ **Confirmar:** Envía el WhatsApp para asegurar el pedido."
+            )
         
         st.markdown(f"<h3 style='text-align: center; color: #2e7b32;'>📋 Paso {st.session_state.web_step} de 4</h3>", unsafe_allow_html=True)
         st.divider()
@@ -321,7 +340,7 @@ if "feria" in query_params:
 
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
-            st.warning("⚠️ **PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) Y LUEGO APRIETA 'IR A MI CARRITO' DESDE CUALQUIERA DE LOS BOTONES DISPONIBLES.**")
+            st.warning("⚠️ **PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) Y LUEGO APRIETA EL BOTÓN 'IR A MI CARRITO' DESDE CUALQUIERA DE LOS BOTONES DISPONIBLES.**")
             
             if st.button("🛒 IR A MI CARRITO", type="primary", use_container_width=True, key="btn_cart_top_web"):
                 procesar_carrito_web()
@@ -345,7 +364,7 @@ if "feria" in query_params:
                 with col_inf:
                     st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 with col_bot:
-                    if st.button("⬇️ Carrito", key=f"bot_{prod_full}_{st.session_state.web_rk}", use_container_width=True):
+                    if st.button("🛒 Carrito", key=f"bot_{prod_full}_{st.session_state.web_rk}", type="primary", use_container_width=True):
                         procesar_carrito_web()
                 
                 if medida_p == "un":
@@ -684,7 +703,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 st.divider()
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
-                st.markdown("<a name='inicio_local'></a>", unsafe_allow_html=True)
                 st.warning("⚠️ **PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) Y LUEGO APRIETA EL BOTÓN 'IR AL RESUMEN' DESDE CUALQUIERA DE LOS BOTONES DISPONIBLES.**")
                 
                 st.markdown("<a href='#resumen_local' style='display: block; text-align: center; background-color: #f0f2f6; color: #111; padding: 12px; border-radius: 8px; font-weight: 900; font-size: 16px; text-decoration: none; border: 3px solid #111;'>⬇️ IR AL RESUMEN PARA ENVIAR A CAJA</a>", unsafe_allow_html=True)
@@ -707,6 +725,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
+                    # FILA LIMPIA: INFO Y BOTÓN "VER RESUMEN"
                     col_pinfo, col_pbtn = st.columns([0.65, 0.35])
                     with col_pinfo:
                         st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
@@ -785,12 +804,15 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                             limpiar_cache_ventas()
                             time.sleep(1)
                             
+                            # RESOLUCIÓN DEL ERROR DE SINTAXIS (f-string anidado y saltos de línea)
                             det = " | ".join([f"{r['producto']}: {r['cantidad_txt']}" for r in carrito_vend])
+                            msg_cajero = f"💳 *NUEVO PEDIDO EN CAJA*\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\n👤 Cliente: {cli_nombre_final}\n💰 Total: ${tot_c:,.1f}\n📦 Detalle: {det}"
+                            
                             st.session_state.msg_vendedor = "✅ ¡Pedido enviado a la Caja con éxito!"
                             num_cajero = limpiar_y_formatear_celular(celular_feriante_local)
                             if not num_cajero: num_cajero = "59893343092"
-                            link_ws_vendedor3 = f"https://api.whatsapp.com/send?phone={num_cajero}&text={urllib.parse.quote(f'💳 *NUEVO PEDIDO EN CAJA*\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\n👤 Cliente: {cli_nombre_final}\n💰 Total: ${tot_c_rapido:,.1f}\n📦 Detalle: {det}')}"
-                            st.session_state.link_vendedor = link_ws_vendedor3
+                            
+                            st.session_state.link_vendedor = f"https://api.whatsapp.com/send?phone={num_cajero}&text={urllib.parse.quote(msg_cajero)}"
                             
                             st.session_state.v_rk += 1
                             st.rerun()
@@ -1248,6 +1270,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         try:
             todas = agrupar_pedidos(ventas_data_global)
             
+            # PENDIENTES DE LLEVAR: Evita pedidos no armados
             ent_pendientes = [
                 e for e in todas 
                 if "entregado" not in e['estado'].lower() 
