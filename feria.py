@@ -8,27 +8,38 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTO CONTRASTE
+# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTO CONTRASTE (CÓDIGO ANTI-ROTURAS)
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
 estilos_css = [
     "<style>",
+    "/* PESTAÑAS (TABS) SUPER CLARAS */",
     ".stTabs [data-baseweb='tab-list'] { gap: 6px; justify-content: center; }",
-    ".stTabs [data-baseweb='tab'] { height: 55px; white-space: pre-wrap; background-color: #ffffff; border-radius: 10px; font-size: 16px; font-weight: 700; padding: 0 15px; border: 2px solid #2e7b32; color: #1b5e20; }",
-    ".stTabs [aria-selected='true'] { background-color: #2e7b32 !important; border-color: #1b5e20 !important; color: #ffffff !important; }",
+    ".stTabs [data-baseweb='tab'] { height: 55px; white-space: pre-wrap; background-color: #ffffff; border-radius: 10px; font-size: 16px; font-weight: 700; padding: 0 15px; border: 2px solid #4CAF50; color: #1b5e20; }",
+    "/* ESTO FUERZA LA PESTAÑA ACTIVA A VERDE CLARO CON TEXTO BLANCO */",
+    ".stTabs [aria-selected='true'], .stTabs [aria-selected='true'] * { background-color: #4CAF50 !important; border-color: #388E3C !important; color: #ffffff !important; }",
     
-    "/* RADIO BUTTONS (ACCIONES) */",
+    "/* RADIO BUTTONS DE ACCIONES (Venta Local, Ajustar, Retomar) */",
     "div.row-widget.stRadio > div { flex-wrap: wrap; justify-content: center; gap: 8px; }",
-    "div.row-widget.stRadio > div > label { background-color: #f0f2f6 !important; padding: 10px 15px; border-radius: 8px; font-size: 15px; border: 2px solid #2e7b32; cursor: pointer; margin: 2px; color: #111111 !important; font-weight: bold !important; }",
-    "div.row-widget.stRadio input:checked ~ div { color: #ffffff !important; background-color: #2e7b32 !important; }",
+    "div.row-widget.stRadio > div > label { background-color: #f0f2f6 !important; padding: 10px 15px; border-radius: 8px; font-size: 15px; border: 2px solid #4CAF50; cursor: pointer; margin: 2px; color: #111111 !important; font-weight: bold !important; }",
+    "/* RADIO ACTIVO A VERDE CLARO CON TEXTO BLANCO */",
+    "div.row-widget.stRadio > div > label[data-baseweb='radio'] input:checked + div, div.row-widget.stRadio > div > label[data-baseweb='radio'] input:checked + div * { background-color: #4CAF50 !important; color: #ffffff !important; }",
     
+    "/* TEXTOS GENERALES EN NEGRITA Y OSCUROS */",
     "p, label, span, div, .stMarkdown { color: #111111 !important; font-weight: 600; }",
+    
+    "/* BOTONES PRIMARIOS: BLANCOS CON LETRA NEGRA GIGANTE Y EN NEGRITA */",
     "button[kind='primary'] { background-color: #ffffff !important; border: 3px solid #111111 !important; color: #111111 !important; font-weight: 900 !important; font-size: 18px !important; padding: 14px !important; border-radius: 8px !important; box-shadow: 0px 4px 6px rgba(0,0,0,0.2); }",
     "button[kind='primary']:hover { background-color: #f0f0f0 !important; color: #000000 !important; }",
+    
+    "/* BOTONES SECUNDARIOS */",
     "button { font-weight: bold !important; color: #111111 !important; }",
+    
+    "/* ALERTAS / ERRORES ROJOS */",
     "div[data-baseweb='notification'] { background-color: #d32f2f !important; color: #ffffff !important; }",
     "div[data-baseweb='notification'] p { color: #ffffff !important; font-weight: bold !important; font-size: 16px !important; }",
+    
     "html, body, [data-testid='stAppViewContainer'] { overscroll-behavior-y: none !important; -webkit-overflow-scrolling: touch; }",
     "[data-testid='stMainBlockContainer'] { padding-bottom: 140px !important; }",
     "[data-testid='stSidebar'], [data-testid='collapsedControl'], footer, header, [data-testid='stToolbar'], [data-testid='stDecoration'] { display: none !important; visibility: hidden !important; }",
@@ -330,7 +341,7 @@ if "feria" in query_params:
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
             st.markdown("<a name='inicio_web'></a>", unsafe_allow_html=True)
-            st.warning("⚠️ **PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) Y LUEGO APRIETA EL BOTÓN 'IR A MI CARRITO' DESDE CUALQUIERA DE LOS BOTONES DISPONIBLES.**")
+            st.warning("⚠️ **PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) Y LUEGO APRIETA 'IR A MI CARRITO' DESDE CUALQUIERA DE LOS BOTONES DISPONIBLES.**")
             
             if st.button("🛒 IR A MI CARRITO", type="primary", use_container_width=True, key="btn_cart_top_web"):
                 procesar_carrito_web()
@@ -350,9 +361,11 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
+                desc_tag = f" <span style='color: white; background-color: #d32f2f; padding: 2px 6px; border-radius: 4px; font-size: 12px;'>🎁 -{desc_p}%</span>" if desc_p > 0 else ""
+                
                 col_inf, col_bot = st.columns([0.65, 0.35])
                 with col_inf:
-                    st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b>{desc_tag}<br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                 with col_bot:
                     if st.button("🛒 Carrito", key=f"bot_{prod_full}_{st.session_state.web_rk}", type="primary", use_container_width=True):
                         procesar_carrito_web()
@@ -477,8 +490,8 @@ if "feria" in query_params:
             if not num_feriante_limpio: num_feriante_limpio = "59893343092"
             
             tot_web = sum(i['subtotal'] for i in st.session_state.carrito_web)
-            detalle_str = "\n".join([f"• {i['producto']} ({i['cantidad_txt']})" for i in st.session_state.carrito_web])
-            msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n👤 Cliente: {st.session_state.cli_web_nombre.upper()}\n📍 Dirección: {st.session_state.cli_web_dir}\n💰 Total Est.: ${tot_web:,.1f}\n\n📦 *Mi Pedido:*\n{detalle_str}"
+            detalle_wsp = "\n".join([f"• {i['producto']} ({i['cantidad_txt']})" for i in st.session_state.carrito_web])
+            msg_feriante = f"🛒 *NUEVO PEDIDO WEB*\n👤 Cliente: {st.session_state.cli_web_nombre.upper()}\n📍 Dirección: {st.session_state.cli_web_dir}\n💰 Total Est.: ${tot_web:,.1f}\n\n📦 *Mi Pedido:*\n{detalle_wsp}"
             
             link_ws_web = f"https://api.whatsapp.com/send?phone={num_feriante_limpio}&text={urllib.parse.quote(msg_feriante)}"
             st.link_button("📲 ENVIAR AVISO AL LOCAL AHORA", link_ws_web, type="primary", use_container_width=True)
@@ -655,8 +668,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     st.session_state.cliente_retomado_aviso = ""
                     st.rerun()
 
-            # ENLACE CORRECTO PARA EL RADIO BUTTON (Evita el bug de salto de pantalla)
-            st.radio("Acción:", ["🛍️ Venta Local", "🌐 Ajustar Pedido Web", "🔄 Retomar Pendientes"], horizontal=True, key="modo_tomar")
+            # MANEJO CORRECTO DEL RADIO BUTTON PARA EVITAR ERRORES DE SINTAXIS/WIDGET
+            modos_disponibles = ["🛍️ Venta Local", "🌐 Ajustar Pedido Web", "🔄 Retomar Pendientes"]
+            modo_idx = modos_disponibles.index(st.session_state.modo_tomar) if st.session_state.modo_tomar in modos_disponibles else 0
+            
+            nuevo_modo = st.radio("Acción:", modos_disponibles, horizontal=True, index=modo_idx)
+            if nuevo_modo != st.session_state.modo_tomar:
+                st.session_state.modo_tomar = nuevo_modo
+                st.rerun()
             
             if st.button("🔄 Sincronizar y Actualizar Datos", key="btn_sync_loc_abajo", use_container_width=True): 
                 limpiar_cache_ventas()
@@ -717,9 +736,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
+                    # SI HAY DESCUENTO, SE MUESTRA VISUALMENTE
+                    desc_tag = f" <span style='color: white; background-color: #d32f2f; padding: 2px 6px; border-radius: 4px; font-size: 12px;'>🎁 -{desc_p}%</span>" if desc_p > 0 else ""
+                    
                     col_pinfo, col_pbtn = st.columns([0.65, 0.35])
                     with col_pinfo:
-                        st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b>{desc_tag}<br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
                     with col_pbtn:
                         st.markdown(f"<a href='#resumen_local' style='display: block; text-align: center; background-color: #f0f2f6; color: #111; padding: 8px 2px; border-radius: 8px; font-weight: 800; font-size: 14px; text-decoration: none; border: 2px solid #111;'>⬇️ Ver resumen</a>", unsafe_allow_html=True)
                     
@@ -795,13 +817,15 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                             limpiar_cache_ventas()
                             time.sleep(1)
                             
-                            det = " | ".join([f"{r['producto']}: {r['cantidad_txt']}" for r in carrito_vend])
+                            # MENSAJE DE WHATSAPP SIN FALLOS DE SINTAXIS
+                            det_wsp_local = "\n".join([f"• {r['producto']}: {r['cantidad_txt']}" for r in carrito_vend])
+                            msg_cajero = f"💳 *NUEVO PEDIDO EN CAJA*\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\n👤 Cliente: {cli_nombre_final}\n💰 Total: ${tot_c:,.1f}\n📦 Detalle:\n{det_wsp_local}"
+                            
                             st.session_state.msg_vendedor = "✅ ¡Pedido enviado a la Caja con éxito!"
                             num_cajero = limpiar_y_formatear_celular(celular_feriante_local)
                             if not num_cajero: num_cajero = "59893343092"
-                            link_ws_vendedor3 = f"https://api.whatsapp.com/send?phone={num_cajero}&text={urllib.parse.quote(f'💳 *NUEVO PEDIDO EN CAJA*\\n👨‍💼 Vendedor: {st.session_state.usuario_logueado}\\n👤 Cliente: {cli_nombre_final}\\n💰 Total: ${tot_c:,.1f}\\n📦 Detalle: {det}')}"
-                            st.session_state.link_vendedor = link_ws_vendedor3
                             
+                            st.session_state.link_vendedor = f"https://api.whatsapp.com/send?phone={num_cajero}&text={urllib.parse.quote(msg_cajero)}"
                             st.session_state.v_rk += 1
                             st.rerun()
 
@@ -874,11 +898,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 limpiar_cache_ventas()
                                 time.sleep(1)
                                 
+                                # AHORA EL MENSAJE A CAJA INCLUYE LOS ITEMS EXACTOS
+                                det_ajustado = "\n".join([f"• {ni['producto']} ({ni['cantidad_txt']})" for ni in nuevos_i])
+                                msg_caj_web = f"💳 *CAJA (WEB Ajustado)*\n👤 Cliente: {p_sel['cliente']}\n💰 Total a cobrar: ${tot_real:,.1f}\n📦 Detalle:\n{det_ajustado}"
+                                
                                 st.session_state.msg_ajuste_web = "✅ ¡Pesos confirmados y enviado a Caja Web!"
-                                msg_caj = f"💳 *CAJA (WEB Ajustado)*\nCliente: {p_sel['cliente']}\nTotal a cobrar: ${tot_real:,.1f}"
                                 num_cajero = limpiar_y_formatear_celular(celular_feriante_local)
                                 if not num_cajero: num_cajero = "59893343092"
-                                st.session_state.link_ajuste_web = f"https://api.whatsapp.com/send?phone={num_cajero}&text={urllib.parse.quote(msg_caj)}"
+                                st.session_state.link_ajuste_web = f"https://api.whatsapp.com/send?phone={num_cajero}&text={urllib.parse.quote(msg_caj_web)}"
                                 st.rerun()
 
                 except Exception as e: 
@@ -907,7 +934,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 st.session_state.cli_nombre = p['cliente']
                                 st.session_state.cli_celular = p['celular']
                                 st.session_state.cliente_retomado_aviso = f"⚠️ ATENCIÓN - PEDIDO RETOMADO: Estás editando el pedido de {p['cliente'].upper()} (del día {p['fecha']})."
-                                st.session_state.modo_tomar = "🛍️ Venta Local" # ACTIVA CORRECTAMENTE EL RADIO BUTTON AHORA
+                                st.session_state.modo_tomar = "🛍️ Venta Local"
                                 st.session_state.v_rk += 1
                                 
                                 q_dict = {pr: {'kg_un': 0.0, 'gr': 0.0} for pr in productos_ord_loc}
@@ -967,8 +994,13 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         st.write(f"📅 **Fecha:** {pw['fecha']} {pw['hora']} | 📍 **Dirección:** {pw['direccion']}")
                         st.write(f"💰 **Total Estimado:** ${pw['total']:,.1f}")
                         
-                        detalle_wsp = "\n• ".join(pw['detalle'].split(" | "))
-                        msg_ack = f"👋 Hola {pw['cliente']}, recibimos tu pedido en *{nombre_empresa}* y ya se lo pasamos al equipo para que comience a prepararlo.\n\n📦 *Detalle de tu pedido:*\n• {detalle_wsp}\n\n¡Muchas gracias por elegirnos! 💚"
+                        # WHATSAPP CON DETALLE DEL PEDIDO EXTRAÍDO CORRECTAMENTE
+                        items_list_wsp = []
+                        for item in pw['items']:
+                            items_list_wsp.append(f"• {item.get('producto', '')} ({item.get('cantidad_txt', '')})")
+                        detalle_wsp = "\n".join(items_list_wsp)
+                        
+                        msg_ack = f"👋 Hola {pw['cliente']}, recibimos tu pedido en *{nombre_empresa}* y ya se lo pasamos al equipo para que comience a prepararlo.\n\n📦 *Detalle de tu pedido:*\n{detalle_wsp}\n\n¡Muchas gracias por elegirnos! 💚"
                         link_w_conf = f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(pw['celular'])}&text={urllib.parse.quote(msg_ack)}"
                         st.link_button("📲 1. Enviar WhatsApp ('Hemos recibido tu pedido')", link_w_conf, type="primary", use_container_width=True)
                         
@@ -1061,8 +1093,14 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         st.write(f"👤 **Cliente:** {pw['cliente']} | 📍 **Dir:** {pw['direccion']} | **Total Final:** ${pw['total']:,.1f}")
                         st.write(f"📦 **Detalle:** {pw['detalle']}")
                         
-                        detalle_wsp_final = "\n• ".join(pw['detalle'].split(" | "))
-                        msg_cuenta = f"👋 Hola {pw['cliente']}, tu pedido de *{nombre_empresa}* ya está listo y pesado.\n\n📦 *Detalle final:*\n• {detalle_wsp_final}\n\n💰 El total de tu cuenta es *${pw['total']:,.1f}*. ¡Muchas gracias por elegirnos! 💚"
+                        # INCLUYE EL AHORRO EN EL WSP FINAL
+                        ahorro_web = sum([float(item.get('ahorro', 0)) for item in pw['items']])
+                        detalle_wsp_final = "\n".join([f"• {item.get('producto', '')} ({item.get('cantidad_txt', '')})" for item in pw['items']])
+                        msg_cuenta = f"👋 Hola {pw['cliente']}, tu pedido de *{nombre_empresa}* ya está listo y pesado.\n\n📦 *Detalle final:*\n{detalle_wsp_final}\n\n💰 El total de tu cuenta es *${pw['total']:,.1f}*."
+                        if ahorro_web > 0:
+                            msg_cuenta += f"\n🎉 ¡Te ahorraste ${ahorro_web:,.1f} con nuestros descuentos!"
+                        msg_cuenta += "\n\n¡Muchas gracias por elegirnos! 💚"
+                        
                         st.link_button("📲 1. Enviar Cuenta del Pedido por WhatsApp", f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(pw['celular'])}&text={urllib.parse.quote(msg_cuenta)}", type="primary", use_container_width=True)
                         
                         st.markdown("<br>", unsafe_allow_html=True)
@@ -1091,7 +1129,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 5: CUENTAS A COBRAR
+# PESTAÑA 5: CUENTAS A COBRAR (SOLUCIÓN DE CONTABILIDAD)
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
@@ -1107,24 +1145,31 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             ventas_data_cuentas = obtener_ventas(st.session_state.link_feria)
             todas_o = agrupar_pedidos(ventas_data_cuentas)
             
-            fiados_web = [o for o in todas_o if "web" in o['estado'].lower() and ("pendiente pago" in o['estado'].lower() or "fiado" in o['pago'].lower() or "cuenta" in o['pago'].lower()) and "cancelado" not in o['estado'].lower()]
-            fiados_local = [o for o in todas_o if "web" not in o['estado'].lower() and ("fiado" in o['pago'].lower() or "cuenta" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['estado'].lower()) and "cancelado" not in o['estado'].lower()]
-            abonos_grales = [o for o in todas_o if "abono" in o['estado'].lower() or "abono" in o['detalle'].lower()]
+            # 1. Obtenemos TODOS los abonos y pagos de deuda
+            abonos_grales = [o for o in todas_o if "abono" in o['estado'].lower() or "abono" in o['detalle'].lower() or "pago de deuda" in o['producto'].lower() or "abono" in o['producto'].lower()]
+            
+            # 2. Filtramos la deuda original (ASEGURANDO NO DUPLICAR ABONOS EN LAS LISTAS)
+            fiados_web = [o for o in todas_o if "web" in o['estado'].lower() and ("pendiente pago" in o['estado'].lower() or "fiado" in o['pago'].lower() or "cuenta" in o['pago'].lower()) and "cancelado" not in o['estado'].lower() and o not in abonos_grales]
+            fiados_local = [o for o in todas_o if "web" not in o['estado'].lower() and ("fiado" in o['pago'].lower() or "cuenta" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['estado'].lower()) and "cancelado" not in o['estado'].lower() and o not in abonos_grales]
 
             def consolidar_cuentas(lista_pedidos, abonos):
                 clientes = {}
                 for f_ord in lista_pedidos:
                     cli = f_ord['cliente']
                     if cli not in clientes: 
-                        clientes[cli] = {"total": 0.0, "pagado": 0.0, "celular": f_ord['celular'], "pedidos": [], "fechas": set()}
-                    clientes[cli]["total"] += round(f_ord['total'], 2)
+                        clientes[cli] = {"total": 0.0, "pagado": 0.0, "celular": f_ord['celular'], "pedidos": [], "fechas": set(), "tipos": set()}
+                    clientes[cli]["total"] += round(f_ord['total'], 1)
                     clientes[cli]["fechas"].add(f_ord['fecha'])
                     clientes[cli]["pedidos"].append(f_ord)
+                    if "fiado" in f_ord['estado'].lower() or "cuenta" in f_ord['estado'].lower() or "fiado" in f_ord['pago'].lower():
+                        clientes[cli]["tipos"].add("Fiado/A Cuenta")
+                    if "pendiente pago" in f_ord['estado'].lower():
+                        clientes[cli]["tipos"].add("Pendiente Web")
                 
                 for ab in abonos:
                     cli_ab = ab['cliente']
                     if cli_ab in clientes:
-                        clientes[cli_ab]["pagado"] += round(abs(ab['total']), 2)
+                        clientes[cli_ab]["pagado"] += round(abs(ab['total']), 1)
                 return clientes
 
             ctas_web = consolidar_cuentas(fiados_web, abonos_grales)
@@ -1132,13 +1177,16 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
 
             tab_cw, tab_cl = st.tabs(["🌐 Cuentas Pendientes WEB", "🏪 Cuentas Fiadas LOCALES"])
             
+            # --- PAGOS WEB ---
             with tab_cw:
                 tabla_fw = []
                 for c_name, c_info in ctas_web.items():
                     saldo = round(c_info["total"] - c_info["pagado"], 1)
                     if saldo > 0.0:
                         fechas_str = ", ".join(list(c_info["fechas"]))
-                        tabla_fw.append({"Fecha(s)": fechas_str, "Cliente": c_name, "Total": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo": f"${saldo:,.1f}"})
+                        tip_list = list(c_info["tipos"])
+                        detalle_deuda = " / ".join(tip_list) if tip_list else "Fiado / Pendiente"
+                        tabla_fw.append({"Fecha(s)": fechas_str, "Cliente": c_name, "Concepto": detalle_deuda, "Total": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo": f"${saldo:,.1f}"})
                 
                 if not tabla_fw: st.info("No hay saldos pendientes Web.")
                 else:
@@ -1159,8 +1207,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 nuevo_saldo_w = round(saldo_actual_w - pago_parcial_w, 1)
                                 gc = conectar_google()
                                 ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                                ahora = datetime.now(TZ_UY)
                                 
                                 if nuevo_saldo_w <= 0.0:
+                                    # PAGO TOTAL - ACTUALIZA TODAS LAS FILAS ANTIGUAS Y REGISTRA EFECTIVO HOY
                                     msg_wsp_w = f"👋 Hola {cliente_elegido_w}, registramos tu pago de ${pago_parcial_w:,.1f}. ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
                                     upds = []
                                     for pd_fiado in info_cw["pedidos"]:
@@ -1168,9 +1218,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                         for fi in pd_fiado['filas']:
                                             upds.append({'range': f'{col_e}{fi}', 'values': [["Web - Cobrado"]]})
                                     if upds: ws.batch_update(upds)
+                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_w, "Pago de Deuda Web", 1, -pago_parcial_w, info_cw['celular'], "Efectivo", "Web - Cobrado", "", 0, "[]"])
                                 else:
+                                    # PAGO PARCIAL
                                     msg_wsp_w = f"👋 Hola {cliente_elegido_w}, registramos tu pago de ${pago_parcial_w:,.1f}. ⚠️ Te queda un saldo pendiente de ${nuevo_saldo_w:,.1f}."
-                                    ahora = datetime.now(TZ_UY)
                                     ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_w, "Abono a Cuenta Web", 1, -pago_parcial_w, info_cw['celular'], "Efectivo", "Cuenta Corriente", "", 0, "[]"])
                                 
                                 limpiar_cache_ventas()
@@ -1181,13 +1232,16 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             else:
                                 st.warning("⚠️ Debes subir el monto de arriba a más de 0 para registrar.")
 
+            # --- PAGOS LOCALES ---
             with tab_cl:
                 tabla_fl = []
                 for c_name, c_info in ctas_local.items():
                     saldo = round(c_info["total"] - c_info["pagado"], 1)
                     if saldo > 0.0:
                         fechas_str = ", ".join(list(c_info["fechas"]))
-                        tabla_fl.append({"Fecha(s)": fechas_str, "Cliente": c_name, "Total": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo": f"${saldo:,.1f}"})
+                        tip_list = list(c_info["tipos"])
+                        detalle_deuda = " / ".join(tip_list) if tip_list else "Fiado / Pendiente"
+                        tabla_fl.append({"Fecha(s)": fechas_str, "Cliente": c_name, "Concepto": detalle_deuda, "Total": f"${c_info['total']:,.1f}", "Abonado": f"${c_info['pagado']:,.1f}", "Saldo": f"${saldo:,.1f}"})
                 
                 if not tabla_fl: st.info("No hay saldos pendientes Locales/Fiados.")
                 else:
@@ -1208,6 +1262,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 nuevo_saldo_l = round(saldo_actual_l - pago_parcial_l, 1)
                                 gc = conectar_google()
                                 ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
+                                ahora = datetime.now(TZ_UY)
                                 
                                 if nuevo_saldo_l <= 0.0:
                                     msg_wsp_l = f"👋 Hola {cliente_elegido_l}, registramos tu pago de ${pago_parcial_l:,.1f}. ✅ ¡Tu cuenta ha sido saldada por completo! Muchas gracias."
@@ -1217,9 +1272,9 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                         for fi in pd_fiado['filas']:
                                             upds.append({'range': f'{col_e}{fi}', 'values': [["Cobrado"]]})
                                     if upds: ws.batch_update(upds)
+                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_l, "Pago de Deuda Local", 1, -pago_parcial_l, info_cl['celular'], "Efectivo", "Cobrado", "", 0, "[]"])
                                 else:
                                     msg_wsp_l = f"👋 Hola {cliente_elegido_l}, registramos tu pago de ${pago_parcial_l:,.1f}. ⚠️ Te queda un saldo pendiente de ${nuevo_saldo_l:,.1f}."
-                                    ahora = datetime.now(TZ_UY)
                                     ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_l, "Abono a Cuenta Local", 1, -pago_parcial_l, info_cl['celular'], "Efectivo", "Cuenta Corriente", "", 0, "[]"])
                                 
                                 limpiar_cache_ventas()
@@ -1258,6 +1313,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         try:
             todas = agrupar_pedidos(ventas_data_global)
             
+            # PENDIENTES DE LLEVAR
             ent_pendientes = [
                 e for e in todas 
                 if "entregado" not in e['estado'].lower() 
@@ -1488,7 +1544,9 @@ if st.session_state.rol_logueado == "Admin":
 
         try:
             todas_w = agrupar_pedidos(ventas_data_global)
-            fiados_activos = [o for o in todas_w if ("fiado" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['pago'].lower() or "cuenta" in o['estado'].lower() or "abono" in o['estado'].lower() or "abono" in o['detalle'].lower() or "pendiente pago" in o['estado'].lower()) and "cancelado" not in o['estado'].lower()]
+            
+            abonos_grales = [o for o in todas_w if "abono" in o['estado'].lower() or "abono" in o['detalle'].lower() or "pago de deuda" in o['producto'].lower() or "abono" in o['producto'].lower()]
+            fiados_activos = [o for o in todas_w if ("fiado" in o['pago'].lower() or "fiado" in o['estado'].lower() or "cuenta" in o['pago'].lower() or "cuenta" in o['estado'].lower() or "pendiente pago" in o['estado'].lower()) and "cancelado" not in o['estado'].lower() and o not in abonos_grales]
             
             resumen_saldos = {}
             for o in fiados_activos:
@@ -1497,22 +1555,27 @@ if st.session_state.rol_logueado == "Admin":
                     resumen_saldos[cli] = {"Total": 0.0, "Pagado": 0.0, "Tipos": set(), "EsWeb": False}
                 amt = o['total']
                 is_web = "web" in o['estado'].lower() or "web" in o['vendedor'].lower()
-                is_abono = "abono" in o['estado'].lower() or "abono" in o['detalle'].lower()
                 if is_web: resumen_saldos[cli]["EsWeb"] = True
-                if is_abono: resumen_saldos[cli]["Pagado"] += round(abs(amt), 2)
-                else:
-                    resumen_saldos[cli]["Total"] += round(amt, 2)
-                    if "fiado" in o['estado'].lower() or "cuenta" in o['estado'].lower() or "fiado" in o['pago'].lower():
-                        resumen_saldos[cli]["Tipos"].add("Fiado/A Cuenta")
-                    if "pendiente pago" in o['estado'].lower():
-                        resumen_saldos[cli]["Tipos"].add("Pendiente Web")
+                
+                resumen_saldos[cli]["Total"] += round(amt, 2)
+                if "fiado" in o['estado'].lower() or "cuenta" in o['estado'].lower() or "fiado" in o['pago'].lower():
+                    resumen_saldos[cli]["Tipos"].add("Fiado/A Cuenta")
+                if "pendiente pago" in o['estado'].lower():
+                    resumen_saldos[cli]["Tipos"].add("Pendiente Web")
+            
+            for ab in abonos_grales:
+                cli_ab = str(ab['cliente']).strip().title()
+                if cli_ab in resumen_saldos:
+                    resumen_saldos[cli_ab]["Pagado"] += round(abs(ab['total']), 2)
             
             tabla_w = []
             tabla_l = []
             for cli, d in resumen_saldos.items():
                 saldo = round(d["Total"] - d["Pagado"], 1)
                 if saldo > 0.0:
-                    row = {"Cliente": cli, "Detalle Deuda": " + ".join(list(d["Tipos"])), "Total Pedido": f"${d['Total']:,.1f}", "Pagado": f"${d['Pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"}
+                    tip_list = list(d["Tipos"])
+                    detalle_deuda = " / ".join(tip_list) if tip_list else "Fiado / Pendiente"
+                    row = {"Cliente": cli, "Detalle Deuda": detalle_deuda, "Total Pedido": f"${d['Total']:,.1f}", "Pagado": f"${d['Pagado']:,.1f}", "Saldo Pendiente": f"${saldo:,.1f}"}
                     if d["EsWeb"]: tabla_w.append(row)
                     else: tabla_l.append(row)
             
