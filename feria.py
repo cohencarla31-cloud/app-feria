@@ -301,7 +301,7 @@ if "feria" in query_params:
         with st.expander("ℹ️ Pasos para tu Pedido Online", expanded=(st.session_state.web_step == 1)):
             st.markdown(
                 "1️⃣ **Datos:** Completa tu nombre, celular y dirección.\n"
-                "2️⃣ **Productos:** **PRIMERO ELIGE LA MERCADERÍA CON SU PESO** y luego aprieta el botón de **'IR A MI CARRITO'** (arriba o abajo).\n"
+                "2️⃣ **Productos:** **PRIMERO ELIGE LA MERCADERÍA CON SU PESO** y luego aprieta el botón de **'IR A MI CARRITO'**.\n"
                 "3️⃣ **Revisión:** Verifica el total de tu compra.\n"
                 "4️⃣ **Confirmar:** Envía el WhatsApp para asegurar el pedido."
             )
@@ -356,8 +356,7 @@ if "feria" in query_params:
 
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
-            st.markdown("<a name='inicio_web'></a>", unsafe_allow_html=True)
-            st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA 'IR A MI CARRITO'** (puedes usar el botón de arriba, el de abajo, o los atajos junto a cada verdura).")
+            st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA 'IR A MI CARRITO'**.")
             
             if st.button("🛒 IR A MI CARRITO", type="primary", use_container_width=True, key="btn_cart_top_web"):
                 procesar_carrito_web()
@@ -377,13 +376,12 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                col_inf, col_bot1, col_bot2 = st.columns([0.6, 0.2, 0.2])
+                # Fila simplificada: Solo Info y Botón "Carrito"
+                col_inf, col_bot = st.columns([0.65, 0.35])
                 with col_inf:
                     st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
-                with col_bot1:
-                    st.markdown(f"<a href='#inicio_web' style='display: block; text-align: center; background-color: #f0f2f6; color: #111; padding: 6px 0; border-radius: 8px; font-weight: bold; text-decoration: none; border: 2px solid #111;'>⬆️ Arriba</a>", unsafe_allow_html=True)
-                with col_bot2:
-                    if st.button("⬇️ Carrito", key=f"bot_{prod_full}_{st.session_state.web_rk}", type="primary", use_container_width=True):
+                with col_bot:
+                    if st.button("🛒 Carrito", key=f"bot_{prod_full}_{st.session_state.web_rk}", type="primary", use_container_width=True):
                         procesar_carrito_web()
                 
                 if medida_p == "un":
@@ -649,7 +647,7 @@ with tabs[idx]:
     st.markdown("---")
     st.markdown(
         "**📋 Explicación detallada de cada módulo:**\n\n"
-        "* **📝 Tomar Pedido (Ventas Locales):** PRIMERO ELIGE LA MERCADERÍA CON SU PESO y luego aprieta el botón de bajar al Resumen para enviar a Caja (o los botones ⬇️ al lado de cada producto). Si la caja devuelve un pedido para editar, aparecerá en **Retomar Pendientes** con su respectivo aviso.\n\n"
+        "* **📝 Tomar Pedido (Ventas Locales):** PRIMERO ELIGE LA MERCADERÍA CON SU PESO y luego aprieta el botón de bajar al Resumen para enviar a Caja (o el botón ⬇️ de ver resumen al lado de cada producto). Si la caja devuelve un pedido para editar, aparecerá en **Retomar Pendientes** con su respectivo aviso.\n\n"
         "* **🌐 Estado Pedidos Web:** Recibe automáticamente las compras hechas por los clientes desde la web. Primero envías el WhatsApp de confirmación y luego haces clic en **'Enviar a Preparar'**.\n\n"
         "* **⚖️ Ajustar Pedido Web:** Aquí llegan los pedidos web confirmados. El vendedor los pesa con exactitud en la balanza antes de enviarlos a la caja.\n\n"
         "* **💰 Caja y Cobro:** El cajero procesa los pagos en efectivo, tarjeta o cuenta corriente. Si hay un error, puede devolver el pedido al vendedor con el botón **'Retomar para Editar'**.\n\n"
@@ -687,7 +685,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     st.session_state.cliente_retomado_aviso = ""
                     st.rerun()
 
-            # SELECCION DE MODO (Se ve perfectamente gracias al nuevo CSS)
             st.session_state.modo_tomar = st.radio("Acción:", ["🛍️ Venta Local", "🌐 Ajustar Pedido Web", "🔄 Retomar Pendientes"], horizontal=True, index=["🛍️ Venta Local", "🌐 Ajustar Pedido Web", "🔄 Retomar Pendientes"].index(st.session_state.modo_tomar))
             
             if st.button("🔄 Sincronizar y Actualizar Datos", key="btn_sync_loc_abajo", use_container_width=True): 
@@ -727,9 +724,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
                 st.markdown("<a name='inicio_local'></a>", unsafe_allow_html=True)
-                st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA EL BOTÓN 'IR AL RESUMEN'** (puedes usar el botón de arriba, el de abajo, o los atajos junto a cada verdura).")
+                st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA EL BOTÓN 'IR AL RESUMEN'**.")
                 
-                # --- BOTÓN SUPERIOR: SALTA AL RESUMEN ---
                 st.markdown("<a href='#resumen_local' style='display: block; text-align: center; background-color: #f0f2f6; color: #111; padding: 12px; border-radius: 8px; font-weight: 900; font-size: 16px; text-decoration: none; border: 3px solid #111;'>⬇️ IR AL RESUMEN PARA ENVIAR A CAJA</a>", unsafe_allow_html=True)
 
                 st.markdown("---")
@@ -750,13 +746,12 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    col_pinfo, col_pbtn1, col_pbtn2 = st.columns([0.6, 0.2, 0.2])
+                    # FILA LIMPIA: INFO Y BOTÓN "VER RESUMEN" COMPACTO
+                    col_pinfo, col_pbtn = st.columns([0.65, 0.35])
                     with col_pinfo:
                         st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
-                    with col_pbtn1:
-                        st.markdown(f"<a href='#inicio_local' style='display: block; text-align: center; background-color: #f0f2f6; color: #111; padding: 6px 0; border-radius: 8px; font-weight: bold; text-decoration: none; border: 2px solid #111;'>⬆️ Arriba</a>", unsafe_allow_html=True)
-                    with col_pbtn2:
-                        st.markdown(f"<a href='#resumen_local' style='display: block; text-align: center; background-color: #f0f2f6; color: #111; padding: 6px 0; border-radius: 8px; font-weight: bold; text-decoration: none; border: 2px solid #111;'>⬇️ Ver</a>", unsafe_allow_html=True)
+                    with col_pbtn:
+                        st.markdown(f"<a href='#resumen_local' style='display: block; text-align: center; background-color: #f0f2f6; color: #111; padding: 8px 2px; border-radius: 8px; font-weight: 800; font-size: 14px; text-decoration: none; border: 2px solid #111;'>⬇️ Ver resumen</a>", unsafe_allow_html=True)
                     
                     if medida_p == "un":
                         st.session_state.q_loc[prod_full]['kg_un'] = st.number_input(
@@ -1293,6 +1288,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         try:
             todas = agrupar_pedidos(ventas_data_global)
             
+            # PENDIENTES DE LLEVAR: Evita pedidos no armados ("Web - Pendiente", "Web - Confirmado", "En Caja")
             ent_pendientes = [
                 e for e in todas 
                 if "entregado" not in e['estado'].lower() 
