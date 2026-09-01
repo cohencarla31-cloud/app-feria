@@ -14,7 +14,7 @@ st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_si
 
 st.markdown("""
     <style>
-    /* PESTAÑAS */
+    /* PESTAÑAS (TABS) SUPER CLARAS */
     .stTabs [data-baseweb="tab-list"] { gap: 6px; justify-content: center; }
     .stTabs [data-baseweb="tab"] {
         height: 55px; white-space: pre-wrap; background-color: #ffffff;
@@ -23,29 +23,38 @@ st.markdown("""
     }
     .stTabs [aria-selected="true"] { background-color: #2e7b32 !important; border-color: #1b5e20 !important; color: #ffffff !important; }
     
+    /* RADIO BUTTONS (ACCIONES): ALTO CONTRASTE PARA QUE SE LEAN LAS LETRAS */
+    div.row-widget.stRadio > div { flex-wrap: wrap; justify-content: center; gap: 8px; }
+    div.row-widget.stRadio > div > label {
+        background-color: #f0f2f6 !important;
+        padding: 10px 15px; border-radius: 8px; font-size: 15px;
+        border: 2px solid #2e7b32; cursor: pointer; margin: 2px;
+        color: #111111 !important; font-weight: bold !important;
+    }
+    div.row-widget.stRadio > div > label[data-baseweb="radio"] input:checked + div {
+        background-color: #2e7b32 !important;
+        color: #ffffff !important;
+    }
+    /* Estilo general para opciones de radio seleccionadas en Streamlit */
+    div.row-widget.stRadio input:checked ~ div { color: #ffffff !important; background-color: #2e7b32 !important; }
+
     /* TEXTOS GENERALES EN NEGRITA Y OSCUROS */
     p, label, span, div, .stMarkdown { color: #111111 !important; font-weight: 600; }
     
-    /* BOTONES PRIMARIOS: BLANCOS CON LETRA NEGRA GIGANTE Y EN NEGRITA PARA MÁXIMA VISIBILIDAD */
+    /* BOTONES PRIMARIOS: BLANCOS CON LETRA NEGRA GIGANTE Y EN NEGRITA */
     button[kind="primary"] {
         background-color: #ffffff !important;
         border: 3px solid #111111 !important;
         color: #111111 !important;
         font-weight: 900 !important;
         font-size: 18px !important;
-        padding: 14px !important;
+        padding: 12px !important;
         border-radius: 8px !important;
         box-shadow: 0px 4px 6px rgba(0,0,0,0.2);
     }
     button[kind="primary"]:hover {
         background-color: #f0f0f0 !important;
         color: #000000 !important;
-    }
-
-    /* BOTONES SECUNDARIOS (ATRAS / OTROS) */
-    button {
-        font-weight: bold !important;
-        color: #111111 !important;
     }
 
     /* ALERTAS / ERRORES ROJOS */
@@ -264,6 +273,7 @@ def cargar_datos_feria(link):
         filas_cli = ws_cli.get_all_values()
         for fila in filas_cli[1:]:
             if len(fila) >= 1 and fila[0].strip() and fila[0].strip().lower() != "nombre":
+                # CARGA ROBUSTA DE CLIENTES FRECUENTES (Soporta mayúsculas/minúsculas)
                 nombre_c = fila[0].strip().upper()
                 celular_c = limpiar_y_formatear_celular(fila[1]) if len(fila) > 1 and fila[1] else ""
                 clientes_dict[nombre_c] = celular_c
@@ -300,7 +310,7 @@ if "feria" in query_params:
         with st.expander("ℹ️ Pasos para tu Pedido Online", expanded=(st.session_state.web_step == 1)):
             st.markdown("""
             1️⃣ **Datos:** Completa tu nombre, celular y dirección.
-            2️⃣ **Productos:** **PRIMERO ELIGE LA MERCADERÍA CON SU PESO** y luego aprieta el botón de **'IR A MI CARRITO'** (arriba o abajo).
+            2️⃣ **Productos:** Elige **TODO** lo que vas a llevar y luego avanza al carrito (puedes usar el botón "⬇️ Ir al carrito" junto a cualquier verdura o arriba/abajo).
             3️⃣ **Revisión:** Verifica el total de tu compra.
             4️⃣ **Confirmar:** Envía el WhatsApp para asegurar el pedido.
             """)
@@ -356,7 +366,7 @@ if "feria" in query_params:
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
             st.markdown("<a name='inicio_web'></a>", unsafe_allow_html=True)
-            st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA 'IR A MI CARRITO'** (puedes usar el botón de arriba, el de abajo, o los atajos junto a cada verdura).")
+            st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA EL BOTÓN 'IR A MI CARRITO'** (puedes usar el botón de arriba, el de abajo, o el atajo ⬇️ junto a cada verdura).")
             
             if st.button("🛒 IR A MI CARRITO", type="primary", use_container_width=True, key="btn_cart_top_web"):
                 procesar_carrito_web()
@@ -376,15 +386,12 @@ if "feria" in query_params:
                 desc_p = descuentos.get(prod_full, 0)
                 p_final = precio_orig * (1 - desc_p/100)
                 
-                # Fila con nombre y botones de salto rápido (Ir arriba / Ir abajo)
-                col_inf, col_bot1, col_bot2 = st.columns([0.6, 0.2, 0.2])
+                # PRODUCTO Y BOTÓN COMPACTO AL LADO
+                col_inf, col_btn = st.columns([0.7, 0.3])
                 with col_inf:
                     st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
-                with col_bot1:
-                    if st.button("⬆️ Inicio", key=f"top_{prod_full}_{st.session_state.web_rk}", use_container_width=True):
-                        st.rerun()
-                with col_bot2:
-                    if st.button("🛒 Carrito", key=f"bot_{prod_full}_{st.session_state.web_rk}", type="primary", use_container_width=True):
+                with col_btn:
+                    if st.button("⬇️ Carrito", key=f"bot_w_{prod_full}_{st.session_state.web_rk}", type="primary", use_container_width=True):
                         procesar_carrito_web()
                 
                 if medida_p == "un":
@@ -404,7 +411,7 @@ if "feria" in query_params:
                         value=float(st.session_state.q_web[prod_full]['gr']), 
                         key=f"w_g_{prod_full}_{st.session_state.web_rk}"
                     )
-                st.markdown("<hr style='margin: 8px 0 12px 0; border: 1px solid #ccc;'>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin: 8px 0 12px 0;'>", unsafe_allow_html=True)
 
             st.divider()
             
@@ -650,7 +657,7 @@ with tabs[idx]:
     st.markdown("---")
     st.markdown("""
     **📋 Explicación detallada de cada módulo:**
-    * **📝 Tomar Pedido (Ventas Locales):** PRIMERO ELIGE LA MERCADERÍA CON SU PESO y luego aprieta el botón de **'Enviar a Caja'** (arriba o abajo). Si la caja devuelve un pedido para editar, aparecerá en **Retomar Pendientes** con su respectivo aviso.
+    * **📝 Tomar Pedido (Ventas Locales):** PRIMERO ELIGE LA MERCADERÍA CON SU PESO y luego aprieta el botón de **'Enviar a Caja'** (arriba, abajo, o el botón ⬇️ al lado de cada producto). Si la caja devuelve un pedido para editar, aparecerá en **Retomar Pendientes** con su respectivo aviso.
     * **🌐 Estado Pedidos Web:** Recibe automáticamente las compras hechas por los clientes desde la web. Primero envías el WhatsApp de confirmación y luego haces clic en **'Enviar a Preparar'**.
     * **⚖️ Ajustar Pedido Web:** Aquí llegan los pedidos web confirmados. El vendedor los pesa con exactitud en la balanza antes de enviarlos a la caja.
     * **💰 Caja y Cobro:** El cajero procesa los pagos en efectivo, tarjeta o cuenta corriente. Si hay un error, puede devolver el pedido al vendedor con el botón **'Retomar para Editar'**.
@@ -722,7 +729,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 st.divider()
 
                 st.markdown("### 🛒 Paso 2: Catálogo de Productos")
-                st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA EL BOTÓN 'ENVIAR A CAJA'** (puedes usar el botón de arriba, el de abajo, o los atajos junto a cada verdura).")
+                st.warning("⚠️ **PRIMERO ELIGE LA MERCADERÍA CON SU PESO Y LUEGO APRIETA EL BOTÓN 'ENVIAR A CAJA'** (puedes usar el botón de arriba, el de abajo, o el atajo ⬇️ junto a cada verdura).")
                 
                 def procesar_carrito_local():
                     tot_c_rapido = 0.0
@@ -792,14 +799,11 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     desc_p = DESCUENTOS.get(prod_full, 0)
                     p_final = precio_orig * (1 - desc_p/100)
                     
-                    col_pinfo, col_pbtn1, col_pbtn2 = st.columns([0.6, 0.2, 0.2])
+                    col_pinfo, col_pbtn = st.columns([0.7, 0.3])
                     with col_pinfo:
                         st.markdown(f"<div style='margin-top: 5px;'><b style='font-size: 16px;'>{prod_full}</b><br><span style='color:#2e7b32; font-size: 14px; font-weight: bold;'>${p_final:,.1f}/{medida_p}</span></div>", unsafe_allow_html=True)
-                    with col_pbtn1:
-                        if st.button("⬆️", key=f"top_loc_{prod_full}_{st.session_state.v_rk}", use_container_width=True):
-                            st.rerun()
-                    with col_pbtn2:
-                        if st.button("🚀", key=f"bot_loc_{prod_full}_{st.session_state.v_rk}", type="primary", use_container_width=True):
+                    with col_pbtn:
+                        if st.button("⬇️ Enviar", key=f"bot_loc_{prod_full}_{st.session_state.v_rk}", type="primary", use_container_width=True):
                             procesar_carrito_local()
                     
                     if medida_p == "un":
@@ -1052,7 +1056,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         st.write(f"🛍️ **Detalle:** {pl['detalle']}")
                         pago_l = st.selectbox("Forma de pago:", ["Efectivo", "Tarjeta", "MercadoPago", "A Cuenta"], key="p_loc")
                         
-                        # RETOMAR ARRIBA
                         if st.button("🔄 Retomar para Editar (Devolver al Vendedor)", use_container_width=True, key="btn_retomar_edit"):
                             gc = conectar_google()
                             ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
@@ -1065,7 +1068,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         
                         st.markdown("<br>", unsafe_allow_html=True)
 
-                        # CERRAR COBRO ABAJO
                         if st.button("💵 Cerrar Cobro Local", type="primary", use_container_width=True, key="btn_cierra_cobro"):
                             gc = conectar_google()
                             ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
