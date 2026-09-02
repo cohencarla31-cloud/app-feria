@@ -1,15 +1,14 @@
-name: Despertador App Feria
+name: Despertador Streamlit
 
 on:
   schedule:
-    # Este código hace que el robot visite la app cada 3 horas
-    - cron: "0 */3 * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Visitar la app para que no se duerma
+      - name: Tocar la puerta de la app
         run: |
-          curl -s -o /dev/null -w "%{http_code}" https://app-feria.streamlit.app/
+          curl -I -s -o /dev/null -w "%{http_code}" https://TU-APP.streamlit.app/
