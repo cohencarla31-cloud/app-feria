@@ -8,7 +8,7 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTO CONTRASTE
+# 1. CONFIGURACIÓN INICIAL Y CSS ADAPTATIVO
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
@@ -251,6 +251,24 @@ def cargar_datos_feria(link):
     
     return productos, precios, descuentos, medidas, nombres_planos, clientes_dict, config, medidas_planas, stock_inicial
 
+def guardar_efectivo_inicial(link, monto):
+    try:
+        gc = conectar_google()
+        sh = gc.open_by_url(link)
+        ws_conf = sh.worksheet("Configuracion")
+        records = ws_conf.get_all_values()
+        row_idx = -1
+        for i, row in enumerate(records):
+            if len(row) > 0 and str(row[0]).strip().lower() == "efectivo_inicial":
+                row_idx = i + 1
+                break
+        if row_idx != -1:
+            ws_conf.update_cell(row_idx, 2, str(monto))
+        else:
+            ws_conf.append_row(["efectivo_inicial", str(monto)])
+    except Exception as e:
+        pass
+
 # ==========================================
 # 3. MODO TIENDA PÚBLICA (WIZARD CON 4 PASOS)
 # ==========================================
@@ -468,7 +486,6 @@ if "feria" in query_params:
                     sh = gc.open_by_url(link_excel)
                     sh.worksheet("Registro de Ventas").append_rows(filas_web) 
                     
-                    # FILTRO DE DUPLICADOS CORREGIDO EN CLIENTES: COMPARA MINUSCULAS CON MINUSCULAS
                     try:
                         ws_cli = sh.worksheet("Clientes")
                         nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
@@ -615,8 +632,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     tabs_nombres.append("🛵 Entregas a Domicilio")
 if st.session_state.rol_logueado == "Admin": 
     tabs_nombres.append("📊 Panel Admin")
-    tabs_nombres.append("📈 Reportes Pro (Stock y Ventas)")
-    tabs_nombres.append("📥 Reportes Pro (Saldos Pendientes)")
+    tabs_nombres.append("📈 Reportes Pro")
+    tabs_nombres.append("📥 Reportes Saldos")
 
 tabs = st.tabs(tabs_nombres)
 idx = 0
@@ -700,14 +717,15 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                 st.markdown("### 👤 Paso 1: Datos del Cliente")
                 
                 lista_clientes_base = sorted(list(CLIENTES_DICT.keys())) if CLIENTES_DICT else []
-                opciones_cli = ["Escribir nuevo..."] + lista_clientes_base
+                opcion_nuevo = "➕ Cliente Nuevo (Escribir manual)"
+                opciones_cli = [opcion_nuevo] + lista_clientes_base
                 
                 if not st.session_state.cli_celular:
                     st.session_state.cli_celular = "598"
 
                 def callback_cliente():
-                    sel = st.session_state.get(f"sel_cli_loc_{st.session_state.v_rk}", "Escribir nuevo...")
-                    if sel != "Escribir nuevo...":
+                    sel = st.session_state.get(f"sel_cli_loc_{st.session_state.v_rk}", opcion_nuevo)
+                    if sel != opcion_nuevo:
                         st.session_state.cli_nombre = sel
                         st.session_state.cli_celular = CLIENTES_DICT.get(sel, "598")
                     else:
@@ -815,6 +833,8 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                     if tot_ahor > 0: st.success(f"🎉 Ahorro Total del Cliente: ${tot_ahor:,.1f}")
                     
                     st.warning("⚠️ Revisa que el pedido esté correcto antes de enviarlo a la Caja.")
+                    
+                    st.markdown("<a href='#inicio_local' style='display: block; text-align: center; background-color: #ffffff; color: #111; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 15px; text-decoration: none; border: 2px solid #111; margin-bottom: 15px;'>⬆️ Volver al catálogo a agregar más</a>", unsafe_allow_html=True)
                     
                     if st.button("🚀 CONFIRMAR Y ENVIAR A CAJA", type="primary", use_container_width=True, key="btn_caja_bottom_loc_conf"):
                         if not st.session_state.cli_nombre:
@@ -957,7 +977,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 st.session_state.cli_nombre = p['cliente']
                                 st.session_state.cli_celular = p['celular']
                                 st.session_state.cliente_retomado_aviso = f"⚠️ ATENCIÓN - PEDIDO RETOMADO: Estás editando el pedido de {p['cliente'].upper()} (del día {p['fecha']})."
-                                st.session_state.modo_tomar = "🛍️ Venta Local"
+                                st.session_state.modo_tomar = "🛍️ Venta Local" 
                                 st.session_state.v_rk += 1
                                 
                                 q_dict = {pr: {'kg_un': 0.0, 'gr': 0.0} for pr in productos_ord_loc}
@@ -1026,7 +1046,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             items_list_wsp.append(f"• {item.get('producto', '')} ({item.get('cantidad_txt', f'{item.get('cantidad')} un/kg')})")
                         detalle_wsp = "\n".join(items_list_wsp)
                         
-                        msg_ack = f"👋 Hola {pw['cliente']}, recibimos tu pedido en *{nombre_empresa}* y ya se lo pasamos al equipo para que comience a prepararlo, y te enviaremos a la brevedad el total de tu compra.\n\n📦 *Detalle de tu pedido:*\n{detalle_wsp}\n\n¡Muchas gracias por elegirnos! 💚"
+                        msg_ack = f"👋 Hola {pw['cliente']}, recibimos tu pedido en *{nombre_empresa}* y ya se lo pasamos al equipo para que comience a prepararlo. Te enviaremos a la brevedad el total de tu compra.\n\n📦 *Detalle de tu pedido:*\n{detalle_wsp}\n\n¡Muchas gracias por elegirnos! 💚"
                         link_w_conf = f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(pw['celular'])}&text={urllib.parse.quote(msg_ack)}"
                         st.link_button("📲 1. Enviar WhatsApp ('Hemos recibido tu pedido')", link_w_conf, type="primary", use_container_width=True)
                         
@@ -1307,10 +1327,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                         for fi in pd_fiado['filas']:
                                             upds.append({'range': f'{col_e}{fi}', 'values': [["Cobrado"]]})
                                     if upds: ws.batch_update(upds)
-                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_l, "Pago de Deuda Local", 1, -pago_parcial_l, info_cl['celular'], forma_pago_l, "Cobrado", "", 0, "[]"])
+                                    ws.append_row([ahora.strftime("%d/%m/%Y"), str((ahora + timedelta(seconds=1)).strftime("%H:%M:%S")), st.session_state.usuario_logueado, cliente_elegido_l, "Pago de Deuda Local", 1, -pago_parcial_l, info_cl['celular'], forma_pago_l, "Cobrado", "", 0, "[]"])
                                 else:
                                     msg_wsp_l = f"👋 Hola {cliente_elegido_l}, registramos tu pago de ${pago_parcial_l:,.1f} ({forma_pago_l}). ⚠️ Te queda un saldo pendiente de ${nuevo_saldo_l:,.1f}."
-                                    ws.append_row([ahora.strftime("%d/%m/%Y"), ahora.strftime("%H:%M:%S"), st.session_state.usuario_logueado, cliente_elegido_l, "Abono a Cuenta Local", 1, -pago_parcial_l, info_cl['celular'], forma_pago_l, "Abono Local", "", 0, "[]"])
+                                    ws.append_row([ahora.strftime("%d/%m/%Y"), str((ahora + timedelta(seconds=1)).strftime("%H:%M:%S")), st.session_state.usuario_logueado, cliente_elegido_l, "Abono a Cuenta Local", 1, -pago_parcial_l, info_cl['celular'], forma_pago_l, "Abono Local", "", 0, "[]"])
                                 
                                 limpiar_cache_ventas()
                                 time.sleep(1)
@@ -1433,45 +1453,87 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 7: PANEL ADMIN
+# PESTAÑA 7: PANEL ADMIN (NUEVO ARQUEO Y RECAUDACIÓN)
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
-        st.write("### 📊 Panel Admin y Arqueo de Caja")
+        st.write("### 📊 Panel Admin: Arqueo y Recaudación Diaria")
         
-        with st.expander("🔒 Arqueo y Auditoría de Caja (Efectivo Inicial y Final)"):
-            ef_inicial = st.number_input("Efectivo Inicial en Caja (Fondo de cambio $):", min_value=0.0, step=100.0, value=st.session_state.get('ef_inicial', 0.0))
-            st.session_state.ef_inicial = ef_inicial
-            efectivo_sistema = 0.0
+        col_f1, col_f2 = st.columns([1, 2])
+        with col_f1:
+            fecha_arqueo = st.date_input("📅 Fecha del Arqueo:", value=datetime.now(TZ_UY).date())
+        fecha_str = fecha_arqueo.strftime("%d/%m/%Y")
+        
+        try:
+            ordenes_hoy = [p for p in agrupar_pedidos(ventas_data_global) if p['fecha'] == fecha_str]
+            
+            tot_efectivo = 0.0
+            tot_digital = 0.0
+            tot_fiado = 0.0
+            
+            for p in ordenes_hoy:
+                est = p['estado'].lower()
+                if "cancelado" in est or "caja" in est or "devuelto" in est:
+                    continue
+                    
+                is_payment_row = p['total'] < 0 and ("pago de deuda" in str(p['producto']).lower() or "abono" in str(p['producto']).lower() or "abono" in est)
+                monto = abs(p['total']) if is_payment_row else p['total']
+                pago_str = str(p['pago']).strip().lower()
+                
+                if not is_payment_row and (pago_str in ["a cuenta", "fiado", "pendiente pago", "envío cuenta"] or "pendiente" in est):
+                    tot_fiado += monto
+                else:
+                    if "efectivo" in pago_str:
+                        tot_efectivo += monto
+                    else:
+                        tot_digital += monto
+                        
+            tot_recaudado_hoy = tot_efectivo + tot_digital
+            
+            st.markdown(f"#### 💰 Ingresos Reales Cobrados el {fecha_str}")
+            col_m1, col_m2, col_m3 = st.columns(3)
+            col_m1.metric("Total Cobrado Hoy", f"${tot_recaudado_hoy:,.1f}", "Efectivo + Digital")
+            col_m2.metric("💵 Solo Efectivo", f"${tot_efectivo:,.1f}")
+            col_m3.metric("📱 Tarjetas / Transferencias", f"${tot_digital:,.1f}")
+            
+            st.info(f"📝 **Ventas a Cuenta (Fiado) de este día:** ${tot_fiado:,.1f} *(Mercadería entregada pero no cobrada)*")
+            
+            st.divider()
+            st.markdown("#### 🔒 Arqueo de Caja Físico (Billetes)")
+            
+            ef_ini_config = 0.0
             try:
-                for row in ventas_data_global[1:]:
-                    if len(row) > 9 and row[0] == datetime.now(TZ_UY).strftime("%d/%m/%Y"):
-                        pago_v = str(row[8]).lower() if len(row) > 8 else ""
-                        est_v = str(row[10]).lower() if len(row) > 10 else ""
-                        if "efectivo" in pago_v and "cancelado" not in est_v:
-                            try: efectivo_sistema += float(str(row[6]).replace("$","").replace(",","."))
-                            except: pass
+                ef_ini_config = float(CONFIG.get("efectivo_inicial", 0.0))
             except: pass
             
-            esperado_en_caja = ef_inicial + efectivo_sistema
-            st.write(f"💵 **Efectivo esperado en caja (Inicial + Ventas Efectivo):** ${esperado_en_caja:,.1f}")
-            ef_final = st.number_input("Efectivo Final (Conteo físico en caja $):", min_value=0.0, step=100.0, key="ef_fin_input")
+            ef_inicial = st.number_input("💵 Efectivo Inicial (Puedes modificarlo si agregas cambio):", min_value=0.0, step=1.0, value=float(ef_ini_config))
+            
+            esperado_en_caja = ef_inicial + tot_efectivo
+            st.markdown(f"**Efectivo que debería haber en la caja:** `${esperado_en_caja:,.1f}` *(Inicial + Efectivo Cobrado)*")
+            
+            ef_final = st.number_input("💰 Efectivo Final (Conteo físico real ahora):", min_value=0.0, step=1.0)
+            
             if ef_final > 0:
                 diferencia = ef_final - esperado_en_caja
-                if diferencia == 0: st.success("✅ ¡Caja cuadrada perfectamente!")
-                elif diferencia > 0: st.warning(f"⚠️ Sobrante en caja: +${diferencia:,.1f}")
-                else: st.error(f"❌ Faltante en caja: ${diferencia:,.1f}")
+                if diferencia == 0: 
+                    st.success("✅ ¡Caja cuadrada perfectamente!")
+                elif diferencia > 0: 
+                    st.warning(f"⚠️ Sobrante en caja: +${diferencia:,.1f}")
+                else: 
+                    st.error(f"❌ Faltante en caja: ${diferencia:,.1f}")
+                    
+                if st.button("💾 Cerrar Turno y Guardar como Inicial de Mañana", type="primary", use_container_width=True):
+                    guardar_efectivo_inicial(st.session_state.link_feria, ef_final)
+                    limpiar_cache_ventas()
+                    st.success("✅ ¡Efectivo final guardado exitosamente! Mañana la caja abrirá con este monto de fondo.")
+                    time.sleep(2)
+                    st.rerun()
 
-        st.divider()
-        try:
-            ordenes_admin = agrupar_pedidos(ventas_data_global, None)
-            tot_neto = sum(p['total'] for p in ordenes_admin if "cancelado" not in p['estado'].lower() and "caja" not in p['estado'].lower() and "pendiente" not in p['estado'].lower() and "fiado" not in p['pago'].lower() and "cuenta" not in p['pago'].lower() and "abono" not in p['estado'].lower())
-            st.metric("Recaudación Neta (Cobrada)", f"${tot_neto:,.1f}")
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
 
 # =======================================================
-# PESTAÑA 8: REPORTES PRO (CON FILTROS DE FECHA Y NOMBRE)
+# PESTAÑA 8: REPORTES PRO (CORREGIDO Y CON FECHAS)
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
@@ -1499,19 +1561,32 @@ if st.session_state.rol_logueado == "Admin":
             
             for p in ordenes_admin:
                 est = p['estado'].lower()
-                if "cancelado" not in est and "caja" not in est and "pendiente" not in est and "abono" not in est:
+                if "cancelado" not in est and "caja" not in est and "devuelto" not in est:
+                    
+                    is_payment_row = p['total'] < 0 and ("pago de deuda" in str(p['producto']).lower() or "abono" in str(p['producto']).lower() or "abono" in est)
+                    monto = abs(p['total']) if is_payment_row else p['total']
                     
                     pago_bruto = str(p['pago']).strip().title() if p['pago'] else "A Cuenta / Fiado"
                     if pago_bruto in ["Pendiente Pago", "Envío Cuenta", "Envio Cuenta", "A Definir", "Pendiente"]: 
                         pago_bruto = "A Cuenta / Fiado"
                     
                     origen = " (Web)" if "web" in est else " (Local)"
-                    concepto = pago_bruto + origen
-                    pagos_resumen[concepto] = pagos_resumen.get(concepto, 0.0) + p['total']
-                    vend = str(p['vendedor']).strip().title() if p['vendedor'] else "Desconocido"
-                    vendedores_resumen[vend] = vendedores_resumen.get(vend, 0.0) + p['total']
                     
-                if "cancelado" not in est:
+                    if is_payment_row:
+                        concepto = f"Cobro de Deuda en {pago_bruto}{origen}"
+                    elif "pendiente" in est or pago_bruto == "A Cuenta / Fiado":
+                        concepto = f"Venta Fiada / No Cobrada{origen}"
+                    else:
+                        concepto = f"Venta en {pago_bruto}{origen}"
+                        
+                    key_pago = (p['fecha'], concepto)
+                    pagos_resumen[key_pago] = pagos_resumen.get(key_pago, 0.0) + monto
+                    
+                    vend = str(p['vendedor']).strip().title() if p['vendedor'] else "Desconocido"
+                    key_vend = (p['fecha'], vend)
+                    vendedores_resumen[key_vend] = vendedores_resumen.get(key_vend, 0.0) + monto
+                    
+                if "cancelado" not in est and p['total'] > 0:
                     items_to_process = p['items']
                     try:
                         js = json.loads(p['json'])
@@ -1567,12 +1642,14 @@ if st.session_state.rol_logueado == "Admin":
             with col_r1:
                 st.subheader("💳 Por Forma de Pago y Origen")
                 if pagos_resumen: 
-                    df_pagos = pd.DataFrame(list(pagos_resumen.items()), columns=["Concepto / Forma", "Total"]).sort_values("Concepto / Forma")
+                    lista_pagos = [{"Fecha": k[0], "Concepto / Forma": k[1], "Total": v} for k, v in pagos_resumen.items()]
+                    df_pagos = pd.DataFrame(lista_pagos).sort_values(by=["Fecha", "Concepto / Forma"], ascending=[False, True])
                     st.dataframe(df_pagos.assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True, hide_index=True)
             with col_r2:
                 st.subheader("👨‍💼 Por Vendedor")
                 if vendedores_resumen: 
-                    df_vend = pd.DataFrame(list(vendedores_resumen.items()), columns=["Vendedor", "Total"]).sort_values("Vendedor")
+                    lista_vend = [{"Fecha": k[0], "Vendedor": k[1], "Total": v} for k, v in vendedores_resumen.items()]
+                    df_vend = pd.DataFrame(lista_vend).sort_values(by=["Fecha", "Vendedor"], ascending=[False, True])
                     st.dataframe(df_vend.assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True, hide_index=True)
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
@@ -1592,7 +1669,6 @@ if st.session_state.rol_logueado == "Admin":
         try:
             todas_w = agrupar_pedidos(ventas_data_global)
             
-            # FILTROS ESTRICTOS PARA REPORTES
             abonos_grales = [
                 o for o in todas_w 
                 if "abono" in o['estado'].lower() 
