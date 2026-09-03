@@ -1096,7 +1096,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         st.write(f"🛍️ **Detalle:** {pl['detalle']}")
                         
                         st.markdown("---")
-                        # PAGOS PARCIALES AÑADIDOS A CAJA LOCAL
                         forma_pago_l = st.selectbox("Forma de pago que utiliza ahora:", ["Efectivo", "Transferencia", "Tarjeta", "MercadoPago", "A Cuenta"], key="p_loc")
                         pago_parcial = st.number_input("Monto que paga en este momento ($):", min_value=0.0, max_value=float(pl['total']), value=float(pl['total']), step=1.0, key="monto_cobro_loc")
                         
@@ -1120,10 +1119,11 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             ahora = datetime.now(TZ_UY)
                             
                             if pago_parcial == pl['total']:
-                                # Pago Total
                                 est_f = "Fiado Pendiente" if forma_pago_l == "A Cuenta" else "Cobrado"
                                 upd = []
                                 for f in pl['filas']:
+                                    upd.append({'range': f'A{f}', 'values': [[ahora.strftime("%d/%m/%Y")]]})
+                                    upd.append({'range': f'B{f}', 'values': [[ahora.strftime("%H:%M:%S")]]})
                                     upd.append({'range': f'{col_p}{f}', 'values': [[forma_pago_l]]})
                                     upd.append({'range': f'{col_e}{f}', 'values': [[est_f]]})
                                 ws.batch_update(upd)
@@ -1134,9 +1134,10 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 else:
                                     msg = f"👋 Hola {pl['cliente']}, registramos tu pago de ${pl['total']:,.1f} ({forma_pago_l}).\n\n📦 *Detalle de tu compra:*\n• {detalle_wsp}\n\n¡Gracias!"
                             else:
-                                # Pago Parcial (Fiado)
                                 upd = []
                                 for f in pl['filas']:
+                                    upd.append({'range': f'A{f}', 'values': [[ahora.strftime("%d/%m/%Y")]]})
+                                    upd.append({'range': f'B{f}', 'values': [[ahora.strftime("%H:%M:%S")]]})
                                     upd.append({'range': f'{col_p}{f}', 'values': [["A Cuenta"]]})
                                     upd.append({'range': f'{col_e}{f}', 'values': [["Fiado Pendiente"]]})
                                 ws.batch_update(upd)
@@ -1193,7 +1194,13 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                                 gc = conectar_google()
                                 ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
                                 col_e = chr(65 + pw['idx_est'])
-                                ws.batch_update([{'range': f'{col_e}{f}', 'values': [["Web - Pendiente Pago"]]} for f in pw['filas']])
+                                ahora = datetime.now(TZ_UY)
+                                upd = []
+                                for f in pw['filas']:
+                                    upd.append({'range': f'A{f}', 'values': [[ahora.strftime("%d/%m/%Y")]]})
+                                    upd.append({'range': f'B{f}', 'values': [[ahora.strftime("%H:%M:%S")]]})
+                                    upd.append({'range': f'{col_e}{f}', 'values': [["Web - Pendiente Pago"]]})
+                                ws.batch_update(upd)
                                 limpiar_cache_ventas()
                                 time.sleep(1)
                                 st.success("✅ Pedido archivado en Cuentas a Cobrar y Logística.")
@@ -1483,11 +1490,17 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 7: PANEL ADMIN (NUEVO ARQUEO Y RECAUDACIÓN MATEMÁTICA CORREGIDA)
+# PESTAÑA 7: PANEL ADMIN 
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
         st.write("### 📊 Panel Admin: Arqueo y Recaudación Diaria")
+        
+        col_ref_admin1, col_ref_admin2 = st.columns([1, 3])
+        with col_ref_admin1:
+            if st.button("🔄 Refrescar Panel", key="btn_ref_admin"):
+                limpiar_cache_ventas()
+                st.rerun()
         
         col_f1, col_f2 = st.columns([1, 2])
         with col_f1:
