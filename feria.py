@@ -1072,6 +1072,13 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
         st.write("### 💳 Módulo de Caja")
+        
+        col_ref_caja1, col_ref_caja2 = st.columns([1, 3])
+        with col_ref_caja1:
+            if st.button("🔄 Refrescar Caja", key="btn_ref_caja"):
+                limpiar_cache_ventas()
+                st.rerun()
+                
         sub_caja_1, sub_caja_2 = st.tabs(["🏪 Ventas Locales en Caja", "🌐 Pedidos Web (Envío de Cuenta)"])
         
         with sub_caja_1:
@@ -1085,9 +1092,13 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                         id_l = int(sel_loc.split("(ID ")[1].replace(")", ""))
                         pl = next(x for x in pedidos_local if x['filas'][0] == id_l)
                         
-                        st.write(f"👤 **Cliente:** {pl['cliente']} | **Total:** ${pl['total']:,.1f}")
+                        st.write(f"👤 **Cliente:** {pl['cliente']} | **Total de la Compra:** ${pl['total']:,.1f}")
                         st.write(f"🛍️ **Detalle:** {pl['detalle']}")
-                        pago_l = st.selectbox("Forma de pago:", ["Efectivo", "Transferencia", "Tarjeta", "MercadoPago", "A Cuenta"], key="p_loc")
+                        
+                        st.markdown("---")
+                        # PAGOS PARCIALES AÑADIDOS A CAJA LOCAL
+                        forma_pago_l = st.selectbox("Forma de pago que utiliza ahora:", ["Efectivo", "Transferencia", "Tarjeta", "MercadoPago", "A Cuenta"], key="p_loc")
+                        pago_parcial = st.number_input("Monto que paga en este momento ($):", min_value=0.0, max_value=float(pl['total']), value=float(pl['total']), step=1.0, key="monto_cobro_loc")
                         
                         if st.button("🔄 Retomar para Editar (Devolver al Vendedor)", use_container_width=True, key="btn_retomar_edit"):
                             gc = conectar_google()
@@ -1106,25 +1117,44 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             ws = gc.open_by_url(st.session_state.link_feria).worksheet("Registro de Ventas")
                             col_p = chr(65 + pl['idx_pago'])
                             col_e = chr(65 + pl['idx_est'])
-                            est_f = "Fiado Pendiente" if pago_l == "A Cuenta" else "Cobrado"
+                            ahora = datetime.now(TZ_UY)
                             
-                            upd = []
-                            for f in pl['filas']:
-                                upd.append({'range': f'{col_p}{f}', 'values': [[pago_l]]})
-                                upd.append({'range': f'{col_e}{f}', 'values': [[est_f]]})
-                            ws.batch_update(upd)
+                            if pago_parcial == pl['total']:
+                                # Pago Total
+                                est_f = "Fiado Pendiente" if forma_pago_l == "A Cuenta" else "Cobrado"
+                                upd = []
+                                for f in pl['filas']:
+                                    upd.append({'range': f'{col_p}{f}', 'values': [[forma_pago_l]]})
+                                    upd.append({'range': f'{col_e}{f}', 'values': [[est_f]]})
+                                ws.batch_update(upd)
+                                
+                                detalle_wsp = "\n• ".join(pl['detalle'].split(" | "))
+                                if forma_pago_l == "A Cuenta":
+                                    msg = f"👋 Hola {pl['cliente']}, tu compra en *{nombre_empresa}* quedó registrada a tu cuenta.\n\n📦 *Detalle de tu compra:*\n• {detalle_wsp}\n\n💰 Total Adeudado: ${pl['total']:,.1f}\n\n¡Gracias!"
+                                else:
+                                    msg = f"👋 Hola {pl['cliente']}, registramos tu pago de ${pl['total']:,.1f} ({forma_pago_l}).\n\n📦 *Detalle de tu compra:*\n• {detalle_wsp}\n\n¡Gracias!"
+                            else:
+                                # Pago Parcial (Fiado)
+                                upd = []
+                                for f in pl['filas']:
+                                    upd.append({'range': f'{col_p}{f}', 'values': [["A Cuenta"]]})
+                                    upd.append({'range': f'{col_e}{f}', 'values': [["Fiado Pendiente"]]})
+                                ws.batch_update(upd)
+                                
+                                if pago_parcial > 0:
+                                    ws.append_row([ahora.strftime("%d/%m/%Y"), str((ahora + timedelta(seconds=1)).strftime("%H:%M:%S")), st.session_state.usuario_logueado, pl['cliente'], "Abono a Cuenta Local", 1, -pago_parcial, pl['celular'], forma_pago_l, "Abono Local", "", 0, "[]"])
+                                
+                                nuevo_saldo = pl['total'] - pago_parcial
+                                detalle_wsp = "\n• ".join(pl['detalle'].split(" | "))
+                                if pago_parcial > 0:
+                                    msg = f"👋 Hola {pl['cliente']}, registramos tu abono de ${pago_parcial:,.1f} ({forma_pago_l}) para tu compra.\n\n📦 *Detalle de tu compra:*\n• {detalle_wsp}\n\n⚠️ Resta un saldo pendiente de ${nuevo_saldo:,.1f}.\n\n¡Gracias!"
+                                else:
+                                    msg = f"👋 Hola {pl['cliente']}, tu compra en *{nombre_empresa}* quedó registrada a tu cuenta.\n\n📦 *Detalle de tu compra:*\n• {detalle_wsp}\n\n💰 Total Adeudado: ${pl['total']:,.1f}\n\n¡Gracias!"
+
                             limpiar_cache_ventas()
                             time.sleep(1)
-                            
-                            detalle_wsp = "\n• ".join(pl['detalle'].split(" | "))
-                            
-                            if pago_l == "A Cuenta":
-                                msg = f"👋 Hola {pl['cliente']}, tu compra en *{nombre_empresa}* quedó registrada a tu cuenta.\n\n📦 *Detalle de tu compra:*\n• {detalle_wsp}\n\n💰 Total: ${pl['total']:,.1f}\n\n¡Gracias!"
-                            else:
-                                msg = f"👋 Hola {pl['cliente']}, registramos tu pago de ${pl['total']:,.1f} ({pago_l}).\n\n📦 *Detalle de tu compra:*\n• {detalle_wsp}\n\n¡Gracias!"
-                                
                             st.success("✅ ¡Cobro registrado!")
-                            st.link_button("📲 Enviar WhatsApp", f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(pl['celular'])}&text={urllib.parse.quote(msg)}", type="primary", use_container_width=True)
+                            st.link_button("📲 Enviar WhatsApp de Confirmación", f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(pl['celular'])}&text={urllib.parse.quote(msg)}", type="primary", use_container_width=True)
 
             except Exception as e: st.error(f"Error: {e}")
 
@@ -1190,7 +1220,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
         
         col_ref1, col_ref2 = st.columns([1, 3])
         with col_ref1:
-            if st.button("🔄 Refrescar Cuentas", key="btn_ref_ctas"):
+            if st.button("🔄 Refrescar Cuentas", key="btn_ref_ctas_p5"):
                 limpiar_cache_ventas()
                 st.rerun()
                 
@@ -1453,7 +1483,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 7: PANEL ADMIN
+# PESTAÑA 7: PANEL ADMIN (NUEVO ARQUEO Y RECAUDACIÓN MATEMÁTICA CORREGIDA)
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
@@ -1492,7 +1522,7 @@ if st.session_state.rol_logueado == "Admin":
             
             st.markdown(f"#### 💰 Ingresos Reales Cobrados el {fecha_str}")
             col_m1, col_m2, col_m3 = st.columns(3)
-            col_m1.metric("Total Cobrado Hoy", f"${tot_recaudado_hoy:,.1f}", "Efectivo + Digital")
+            col_m1.metric("Total Cobrado", f"${tot_recaudado_hoy:,.1f}", "Efectivo + Digital")
             col_m2.metric("💵 Solo Efectivo", f"${tot_efectivo:,.1f}")
             col_m3.metric("📱 Tarjetas / Transferencias", f"${tot_digital:,.1f}")
             
@@ -1506,28 +1536,29 @@ if st.session_state.rol_logueado == "Admin":
                 ef_ini_config = float(CONFIG.get("efectivo_inicial", 0.0))
             except: pass
             
-            ef_inicial = st.number_input("💵 Efectivo Inicial (Puedes modificarlo si agregas cambio):", min_value=0.0, step=1.0, value=float(ef_ini_config))
-            
-            esperado_en_caja = ef_inicial + tot_efectivo
-            st.markdown(f"**Efectivo que debería haber en la caja:** `${esperado_en_caja:,.1f}` *(Inicial + Efectivo Cobrado)*")
-            
-            ef_final = st.number_input("💰 Efectivo Final (Conteo físico real ahora):", min_value=0.0, step=1.0)
-            
-            if ef_final > 0:
-                diferencia = ef_final - esperado_en_caja
-                if diferencia == 0: 
-                    st.success("✅ ¡Caja cuadrada perfectamente!")
-                elif diferencia > 0: 
-                    st.warning(f"⚠️ Sobrante en caja: +${diferencia:,.1f}")
-                else: 
-                    st.error(f"❌ Faltante en caja: ${diferencia:,.1f}")
-                    
-                if st.button("💾 Cerrar Turno y Guardar como Inicial de Mañana", type="primary", use_container_width=True):
-                    guardar_efectivo_inicial(st.session_state.link_feria, ef_final)
-                    limpiar_cache_ventas()
-                    st.success("✅ ¡Efectivo final guardado exitosamente! Mañana la caja abrirá con este monto de fondo.")
-                    time.sleep(2)
-                    st.rerun()
+            with st.expander("Ver y Cerrar Caja Físicamente", expanded=True):
+                ef_inicial = st.number_input("💵 Efectivo Inicial (Puedes modificarlo si agregas cambio):", min_value=0.0, step=1.0, value=float(ef_ini_config))
+                
+                esperado_en_caja = ef_inicial + tot_efectivo
+                st.markdown(f"**Efectivo que debería haber en la caja:** `${esperado_en_caja:,.1f}` *(Inicial + Efectivo Cobrado)*")
+                
+                ef_final = st.number_input("💰 Efectivo Final (Conteo físico real ahora):", min_value=0.0, step=1.0)
+                
+                if ef_final > 0:
+                    diferencia = ef_final - esperado_en_caja
+                    if diferencia == 0: 
+                        st.success("✅ ¡Caja cuadrada perfectamente!")
+                    elif diferencia > 0: 
+                        st.warning(f"⚠️ Sobrante en caja: +${diferencia:,.1f}")
+                    else: 
+                        st.error(f"❌ Faltante en caja: ${diferencia:,.1f}")
+                        
+                    if st.button("💾 Cerrar Turno y Guardar como Inicial de Mañana", type="primary", use_container_width=True):
+                        guardar_efectivo_inicial(st.session_state.link_feria, ef_final)
+                        limpiar_cache_ventas()
+                        st.success("✅ ¡Efectivo final guardado exitosamente! Mañana la caja abrirá con este monto de fondo.")
+                        time.sleep(2)
+                        st.rerun()
 
         except Exception as e: st.error(f"Error: {e}")
     idx += 1
