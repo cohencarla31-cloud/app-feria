@@ -977,7 +977,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero", "Vendedor"]:
                                 st.session_state.cli_nombre = p['cliente']
                                 st.session_state.cli_celular = p['celular']
                                 st.session_state.cliente_retomado_aviso = f"⚠️ ATENCIÓN - PEDIDO RETOMADO: Estás editando el pedido de {p['cliente'].upper()} (del día {p['fecha']})."
-                                st.session_state.modo_tomar = "🛍️ Venta Local" 
+                                st.session_state.modo_tomar = "🛍️ Venta Local"
                                 st.session_state.v_rk += 1
                                 
                                 q_dict = {pr: {'kg_un': 0.0, 'gr': 0.0} for pr in productos_ord_loc}
@@ -1453,7 +1453,7 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 7: PANEL ADMIN (NUEVO ARQUEO Y RECAUDACIÓN)
+# PESTAÑA 7: PANEL ADMIN
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
@@ -1476,7 +1476,7 @@ if st.session_state.rol_logueado == "Admin":
                 if "cancelado" in est or "caja" in est or "devuelto" in est:
                     continue
                     
-                is_payment_row = p['total'] < 0 and ("pago de deuda" in str(p['producto']).lower() or "abono" in str(p['producto']).lower() or "abono" in est)
+                is_payment_row = p['total'] < 0 and ("pago de deuda" in p['detalle'].lower() or "abono" in p['detalle'].lower() or "abono" in est)
                 monto = abs(p['total']) if is_payment_row else p['total']
                 pago_str = str(p['pago']).strip().lower()
                 
@@ -1533,7 +1533,7 @@ if st.session_state.rol_logueado == "Admin":
     idx += 1
 
 # =======================================================
-# PESTAÑA 8: REPORTES PRO (CORREGIDO Y CON FECHAS)
+# PESTAÑA 8: REPORTES PRO
 # =======================================================
 if st.session_state.rol_logueado == "Admin":
     with tabs[idx]:
@@ -1563,7 +1563,7 @@ if st.session_state.rol_logueado == "Admin":
                 est = p['estado'].lower()
                 if "cancelado" not in est and "caja" not in est and "devuelto" not in est:
                     
-                    is_payment_row = p['total'] < 0 and ("pago de deuda" in str(p['producto']).lower() or "abono" in str(p['producto']).lower() or "abono" in est)
+                    is_payment_row = p['total'] < 0 and ("pago de deuda" in p['detalle'].lower() or "abono" in p['detalle'].lower() or "abono" in est)
                     monto = abs(p['total']) if is_payment_row else p['total']
                     
                     pago_bruto = str(p['pago']).strip().title() if p['pago'] else "A Cuenta / Fiado"
@@ -1579,8 +1579,7 @@ if st.session_state.rol_logueado == "Admin":
                     else:
                         concepto = f"Venta en {pago_bruto}{origen}"
                         
-                    key_pago = (p['fecha'], concepto)
-                    pagos_resumen[key_pago] = pagos_resumen.get(key_pago, 0.0) + monto
+                    pagos_resumen[concepto] = pagos_resumen.get(concepto, 0.0) + monto
                     
                     vend = str(p['vendedor']).strip().title() if p['vendedor'] else "Desconocido"
                     key_vend = (p['fecha'], vend)
@@ -1642,11 +1641,10 @@ if st.session_state.rol_logueado == "Admin":
             with col_r1:
                 st.subheader("💳 Por Forma de Pago y Origen")
                 if pagos_resumen: 
-                    lista_pagos = [{"Fecha": k[0], "Concepto / Forma": k[1], "Total": v} for k, v in pagos_resumen.items()]
-                    df_pagos = pd.DataFrame(lista_pagos).sort_values(by=["Fecha", "Concepto / Forma"], ascending=[False, True])
+                    df_pagos = pd.DataFrame(list(pagos_resumen.items()), columns=["Concepto / Forma", "Total"]).sort_values("Concepto / Forma")
                     st.dataframe(df_pagos.assign(Total=lambda x: x["Total"].map(lambda v: f"${v:,.1f}")), use_container_width=True, hide_index=True)
             with col_r2:
-                st.subheader("👨‍💼 Por Vendedor")
+                st.subheader("👨‍💼 Por Vendedor (Con Fecha)")
                 if vendedores_resumen: 
                     lista_vend = [{"Fecha": k[0], "Vendedor": k[1], "Total": v} for k, v in vendedores_resumen.items()]
                     df_vend = pd.DataFrame(lista_vend).sort_values(by=["Fecha", "Vendedor"], ascending=[False, True])
