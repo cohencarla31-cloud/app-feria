@@ -8,35 +8,27 @@ import json
 import time
 
 # ==========================================
-# 1. CONFIGURACIÓN INICIAL Y CSS ADAPTATIVO (MODO OSCURO/CLARO)
+# 1. CONFIGURACIÓN INICIAL Y CSS DE ALTO CONTRASTE
 # ==========================================
 st.set_page_config(page_title="App Ferias - SaaS", layout="centered", initial_sidebar_state="collapsed")
 
 estilos_css = [
     "<style>",
-    "/* PESTAÑAS (TABS) SUPER CLARAS */",
     ".stTabs [data-baseweb='tab-list'] { gap: 6px; justify-content: center; }",
     ".stTabs [data-baseweb='tab'] { height: 55px; white-space: pre-wrap; background-color: #ffffff !important; border-radius: 10px; font-size: 16px; font-weight: 700; padding: 0 15px; border: 2px solid #4CAF50 !important; color: #1b5e20 !important; }",
-    "/* ESTO FUERZA LA PESTAÑA ACTIVA A VERDE CLARO CON TEXTO BLANCO */",
     ".stTabs [aria-selected='true'], .stTabs [aria-selected='true'] * { background-color: #4CAF50 !important; border-color: #388E3C !important; color: #ffffff !important; }",
     
-    "/* RADIO BUTTONS DE ACCIONES (Venta Local, Ajustar, Retomar) */",
     "div.row-widget.stRadio > div { flex-wrap: wrap; justify-content: center; gap: 8px; }",
     "div.row-widget.stRadio > div > label { background-color: #f0f2f6 !important; padding: 10px 15px; border-radius: 8px; font-size: 15px; border: 2px solid #4CAF50 !important; cursor: pointer; margin: 2px; color: #111111 !important; font-weight: bold !important; }",
-    "/* RADIO ACTIVO A VERDE CLARO CON TEXTO BLANCO */",
     "div.row-widget.stRadio > div > label[data-baseweb='radio'] input:checked + div, div.row-widget.stRadio > div > label[data-baseweb='radio'] input:checked + div * { background-color: #4CAF50 !important; color: #ffffff !important; }",
     
-    "/* TEXTOS GENERALES (Se adapta automáticamente al modo oscuro/claro) */",
     "p, label, .stMarkdown { font-weight: 500; }",
     
-    "/* BOTONES PRIMARIOS: BLANCOS CON LETRA NEGRA GIGANTE Y EN NEGRITA */",
     "button[kind='primary'] { background-color: #ffffff !important; border: 3px solid #111111 !important; color: #111111 !important; font-weight: 900 !important; font-size: 18px !important; padding: 14px !important; border-radius: 8px !important; box-shadow: 0px 4px 6px rgba(0,0,0,0.2); }",
     "button[kind='primary']:hover { background-color: #f0f0f0 !important; color: #000000 !important; }",
     
-    "/* BOTONES SECUNDARIOS */",
     "button[kind='secondary'] { font-weight: bold !important; }",
     
-    "/* ALERTAS / ERRORES ROJOS */",
     "div[data-baseweb='notification'] { background-color: #d32f2f !important; color: #ffffff !important; }",
     "div[data-baseweb='notification'] p { color: #ffffff !important; font-weight: bold !important; font-size: 16px !important; }",
     
@@ -279,6 +271,7 @@ if "feria" in query_params:
         nombre_feria = config.get("nombre_empresa", config.get("nombre", "Nuestra Feria"))
         celular_feriante = config.get("celular_feriante", config.get("celular_contacto", "59893343092"))
         bienvenida_dia = config.get("bienvenida", config.get("ofertas", config.get("banner", "")))
+        cuenta_bancaria_config = config.get("cuenta_bancaria", config.get("cuenta", "No especificada en configuración"))
         
         productos_ord_web = sorted(productos, key=lambda x: nombres_planos.get(x, x).strip().lower())
         
@@ -344,7 +337,7 @@ if "feria" in query_params:
         elif st.session_state.web_step == 2:
             st.subheader("2️⃣ Listado de Productos")
             st.markdown("<a name='inicio_web'></a>", unsafe_allow_html=True)
-            st.warning("⚠️ **PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) Y LUEGO APRIETA 'IR A MI CARRITO' DESDE CUALQUIERA DE LOS BOTONES DISPONIBLES.**")
+            st.warning("⚠️ **PRIMERO ELIGE TODA LA MERCADERÍA A COMPRAR (CON SU PESO) Y LUEGO APRIETA EL BOTÓN 'IR A MI CARRITO' DESDE CUALQUIERA DE LOS BOTONES DISPONIBLES.**")
             
             if st.button("🛒 IR A MI CARRITO", type="primary", use_container_width=True, key="btn_cart_top_web"):
                 procesar_carrito_web()
@@ -455,7 +448,7 @@ if "feria" in query_params:
                     filas_web = []
                     ahora = datetime.now(TZ_UY)
                     celular_formateado = limpiar_y_formatear_celular(st.session_state.cli_web_celular)
-                    nombre_mayus = st.session_state.cli_web_nombre.upper()
+                    nombre_mayus = st.session_state.cli_web_nombre.strip().upper()
                     
                     items_estructurados = []
                     for itw in st.session_state.carrito_web:
@@ -475,10 +468,11 @@ if "feria" in query_params:
                     sh = gc.open_by_url(link_excel)
                     sh.worksheet("Registro de Ventas").append_rows(filas_web) 
                     
+                    # FILTRO DE DUPLICADOS CORREGIDO EN CLIENTES: COMPARA MINUSCULAS CON MINUSCULAS
                     try:
                         ws_cli = sh.worksheet("Clientes")
                         nombres_existentes = [str(x).strip().lower() for x in ws_cli.col_values(1)[1:]]
-                        if nombre_mayus not in nombres_existentes:
+                        if nombre_mayus.lower() not in nombres_existentes:
                             ws_cli.append_row([nombre_mayus, celular_formateado, "Web"])
                     except: pass
                     
@@ -1032,7 +1026,6 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                             items_list_wsp.append(f"• {item.get('producto', '')} ({item.get('cantidad_txt', f'{item.get('cantidad')} un/kg')})")
                         detalle_wsp = "\n".join(items_list_wsp)
                         
-                        # MENSAJE ACTUALIZADO "A LA BREVEDAD EL TOTAL"
                         msg_ack = f"👋 Hola {pw['cliente']}, recibimos tu pedido en *{nombre_empresa}* y ya se lo pasamos al equipo para que comience a prepararlo, y te enviaremos a la brevedad el total de tu compra.\n\n📦 *Detalle de tu pedido:*\n{detalle_wsp}\n\n¡Muchas gracias por elegirnos! 💚"
                         link_w_conf = f"https://api.whatsapp.com/send?phone={limpiar_y_formatear_celular(pw['celular'])}&text={urllib.parse.quote(msg_ack)}"
                         st.link_button("📲 1. Enviar WhatsApp ('Hemos recibido tu pedido')", link_w_conf, type="primary", use_container_width=True)
@@ -1054,11 +1047,11 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     idx += 1
 
 # =======================================================
-# PESTAÑA 4: CAJA Y COBRO
+# PESTAÑA 4: CAJA
 # =======================================================
 if st.session_state.rol_logueado in ["Admin", "Cajero"]:
     with tabs[idx]:
-        st.write("### 💳 Módulo de Caja y Cobro")
+        st.write("### 💳 Módulo de Caja")
         sub_caja_1, sub_caja_2 = st.tabs(["🏪 Ventas Locales en Caja", "🌐 Pedidos Web (Envío de Cuenta)"])
         
         with sub_caja_1:
@@ -1362,11 +1355,16 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                     continue
                 if "caja" in est_l or est_l == "web - pendiente" or est_l == "web - confirmado" or est_l == "pendiente":
                     continue
-                if e["direccion"].strip() == "":
+                if "abono" in est_l or "abono" in e['detalle'].lower() or "pago de deuda" in est_l:
                     continue
-                ent_pendientes.append(e)
+                
+                is_web = "web" in est_l or "web" in str(e.get('vendedor', '')).lower()
+                has_address = e["direccion"].strip() != ""
+                
+                if has_address or is_web:
+                    ent_pendientes.append(e)
             
-            ent_entregados_total = [e for e in todas if "entregado" in e['estado'].lower() and e["direccion"].strip() != ""]
+            ent_entregados_total = [e for e in todas if "entregado" in e['estado'].lower() and (e["direccion"].strip() != "" or "web" in e['estado'].lower())]
             ent_entregados_ultimos = ent_entregados_total[-25:] 
             ent_entregados_ultimos.reverse() 
 
@@ -1377,18 +1375,19 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
                 for ent in ent_pendientes:
                     estado_str = ent['estado'].lower()
                     estado_pago = "✅ Cancelado (Pagado)" if "cobrado" in estado_str else f"⚠️ Saldo: ${ent['total']:,.1f}"
+                    dir_mostrar = ent['direccion'] if ent['direccion'].strip() else "Acordar con cliente"
                     
                     tabla_ent.append({
                         "Fecha Pedido": f"{ent['fecha']} {ent['hora']}",
                         "Cliente": ent['cliente'],
-                        "Dirección": ent['direccion'],
+                        "Dirección": dir_mostrar,
                         "Monto": f"${ent['total']:,.1f}",
                         "Estado Pago": estado_pago
                     })
                 st.dataframe(pd.DataFrame(tabla_ent), use_container_width=True)
                 
                 st.write("#### Acciones de Logística:")
-                sel_ent = st.selectbox("Seleccionar entrega:", ["Seleccionar..."] + [f"{e['cliente']} - {e['direccion']} (ID {e['filas'][0]})" for e in ent_pendientes], key="sel_ent_box")
+                sel_ent = st.selectbox("Seleccionar entrega:", ["Seleccionar..."] + [f"{e['cliente']} - {e['direccion'] if e['direccion'].strip() else 'Sin Dir'} (ID {e['filas'][0]})" for e in ent_pendientes], key="sel_ent_box")
                 if sel_ent != "Seleccionar...":
                     id_e = int(sel_ent.split("(ID ")[1].replace(")", ""))
                     ent_sel = next(x for x in ent_pendientes if x['filas'][0] == id_e)
@@ -1421,10 +1420,11 @@ if st.session_state.rol_logueado in ["Admin", "Cajero"]:
             else:
                 tabla_hoy = []
                 for eh in ent_entregados_ultimos:
+                    dir_mostrar_h = eh['direccion'] if eh['direccion'].strip() else "Acordar con cliente"
                     tabla_hoy.append({
                         "Fecha de Pedido": eh['fecha'],
                         "Cliente": eh['cliente'],
-                        "Dirección": eh['direccion'],
+                        "Dirección": dir_mostrar_h,
                         "Estado Final": eh['estado']
                     })
                 st.dataframe(pd.DataFrame(tabla_hoy), use_container_width=True)
