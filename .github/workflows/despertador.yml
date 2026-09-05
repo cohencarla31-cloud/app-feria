@@ -11,4 +11,4 @@ jobs:
     steps:
       - name: Tocar la puerta de la app
         run: |
-          curl -I -s -o /dev/null -w "%{http_code}" https://TU-APP.streamlit.app/
+          curl -I -s -o /dev/null -w "%{http_code}" https://app-feria.streamlit.app/
